@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Expense
 from app.utils.dates import local_date_for_now
@@ -31,3 +31,16 @@ class ExpenseService:
         q = select(Expense).where(Expense.id == expense_id)
         res = await self.db.execute(q)
         return res.scalar_one_or_none()
+
+    async def update_category(self, *, expense_id: str, user_id: int, category_name: str | None):
+        # Ensure ownership
+        q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        res = await self.db.execute(q)
+        exp = res.scalar_one_or_none()
+        if not exp:
+            return None
+
+        exp.category = category_name
+        await self.db.commit()
+        await self.db.refresh(exp)
+        return exp
