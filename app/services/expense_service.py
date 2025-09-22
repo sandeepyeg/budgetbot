@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import func, select, update
+from sqlalchemy import extract, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Expense
 from app.utils.dates import local_date_for_now
@@ -73,4 +73,46 @@ class ExpenseService:
             "month": month,
             "total_cents": total,
             "breakdown": breakdown,
+        }
+    
+    async def yearly_summary(self, user_id: int, year: int):
+        """
+        Returns yearly total + breakdown by category + per-month totals.
+        """
+        # Category breakdown
+        q_cat = (
+            select(
+                Expense.category,
+                func.sum(Expense.amount_cents).label("cat_total_cents"),
+            )
+            .where(extract("year", Expense.local_date) == year,
+                   Expense.user_id == user_id)
+            .group_by(Expense.category)
+        )
+        res_cat = await self.db.execute(q_cat)
+        cat_rows = res_cat.all()
+
+        breakdown = {row.category or "Uncategorized": row.cat_total_cents for row in cat_rows}
+        total = sum([row.cat_total_cents or 0 for row in cat_rows])
+
+        # Per-month totals
+        q_months = (
+            select(
+                extract("month", Expense.local_date).label("month"),
+                func.sum(Expense.amount_cents).label("month_total_cents"),
+            )
+            .where(extract("year", Expense.local_date) == year,
+                   Expense.user_id == user_id)
+            .group_by("month")
+            .order_by("month")
+        )
+        res_months = await self.db.execute(q_months)
+        month_rows = res_months.all()
+        per_month = {int(row.month): row.month_total_cents for row in month_rows}
+
+        return {
+            "year": year,
+            "total_cents": total,
+            "breakdown": breakdown,
+            "per_month": per_month,
         }

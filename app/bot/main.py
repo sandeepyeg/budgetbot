@@ -25,6 +25,7 @@ async def on_startup(bot: Bot):
         BotCommand(command="categories", description="List categories"),
         BotCommand(command="setcategory", description="Set category for an expense"),
         BotCommand(command="month", description="Monthly report: /month [year month]"),
+        BotCommand(command="year", description="Yearly report: /year [year]"),
     ])
     logger.info("Bot commands set.")
 
