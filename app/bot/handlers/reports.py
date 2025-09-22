@@ -174,3 +174,33 @@ async def year_details(message: Message, db: AsyncSession):
         lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
 
     await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.message(Command("search"))
+async def search_expenses_cmd(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /search coffee
+      /search uber
+    """
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Usage: /search <keyword>\nExample: /search coffee")
+        return
+
+    keyword = parts[1].strip()
+    svc = ExpenseService(db)
+    results = await svc.search_expenses(message.from_user.id, keyword)
+
+    if not results:
+        await message.answer(f"No expenses found for: {keyword}")
+        return
+
+    lines = [f"🔍 Results for *{keyword}* (latest {len(results)})"]
+    for exp in results:
+        dollars = exp.amount_cents / 100
+        cat = f" · 🏷 {exp.category}" if exp.category else ""
+        tags = f" · #{exp.tags.replace(',', ' #')}" if exp.tags else ""
+        lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date})")
+
+    await message.answer("\n".join(lines), parse_mode="Markdown")

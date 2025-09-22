@@ -152,3 +152,26 @@ class ExpenseService:
         res = await self.db.execute(q)
         rows = res.all()
         return rows
+    
+    async def search_expenses(self, user_id: int, query: str, limit: int = 10):
+        """
+        Simple keyword search across item_name, category, tags, and notes.
+        Returns up to `limit` results sorted by most recent.
+        """
+        pattern = f"%{query.lower()}%"
+        q = (
+            select(Expense)
+            .where(
+                Expense.user_id == user_id,
+                (
+                    func.lower(Expense.item_name).like(pattern) |
+                    func.lower(Expense.category).like(pattern) |
+                    func.lower(Expense.tags).like(pattern) |
+                    func.lower(Expense.notes).like(pattern)
+                )
+            )
+            .order_by(Expense.created_at_utc.desc())
+            .limit(limit)
+        )
+        res = await self.db.execute(q)
+        return list(res.scalars().all())

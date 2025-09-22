@@ -28,6 +28,8 @@ async def on_startup(bot: Bot):
         BotCommand(command="year", description="Yearly report: /year [year]"),
         BotCommand(command="monthdetails", description="Month details by item/category"),
         BotCommand(command="yeardetails", description="Year details by item/category"),
+        BotCommand(command="search", description="Search expenses"),
+
     ])
     logger.info("Bot commands set.")
 
