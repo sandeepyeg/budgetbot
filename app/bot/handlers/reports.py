@@ -93,3 +93,84 @@ async def year_report(message: Message, db: AsyncSession):
                 lines.append(f" - {year}-{m:02d}: ${dollars:.2f}")
 
     await message.answer("\n".join(lines), parse_mode="Markdown")
+
+@router.message(Command("monthdetails"))
+async def month_details(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /monthdetails item          → current month, grouped by item
+      /monthdetails category      → current month, grouped by category
+      /monthdetails 2025 9 item   → specific year/month
+    """
+    parts = (message.text or "").split()
+    now = datetime.now()
+    year, month, group_by = now.year, now.month, "item"
+
+    if len(parts) == 2:
+        group_by = parts[1].lower()
+    elif len(parts) == 4:
+        try:
+            year, month = int(parts[1]), int(parts[2])
+            group_by = parts[3].lower()
+        except ValueError:
+            await message.answer("Usage: /monthdetails [year month group_by]\nExample: /monthdetails 2025 9 category")
+            return
+
+    if group_by not in ["item", "category"]:
+        await message.answer("Group by must be 'item' or 'category'")
+        return
+
+    svc = ExpenseService(db)
+    rows = await svc.monthly_details(message.from_user.id, year, month, group_by)
+
+    if not rows:
+        await message.answer(f"No expenses found for {year}-{month:02d}.")
+        return
+
+    lines = [f"📅 *{year}-{month:02d}* — grouped by {group_by}"]
+    for key, cents in rows:
+        dollars = (cents or 0) / 100
+        lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
+
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.message(Command("yeardetails"))
+async def year_details(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /yeardetails item
+      /yeardetails category
+      /yeardetails 2025 item
+    """
+    parts = (message.text or "").split()
+    now = datetime.now()
+    year, group_by = now.year, "item"
+
+    if len(parts) == 2:
+        group_by = parts[1].lower()
+    elif len(parts) == 3:
+        try:
+            year = int(parts[1])
+            group_by = parts[2].lower()
+        except ValueError:
+            await message.answer("Usage: /yeardetails [year group_by]\nExample: /yeardetails 2025 category")
+            return
+
+    if group_by not in ["item", "category"]:
+        await message.answer("Group by must be 'item' or 'category'")
+        return
+
+    svc = ExpenseService(db)
+    rows = await svc.yearly_details(message.from_user.id, year, group_by)
+
+    if not rows:
+        await message.answer(f"No expenses found for {year}.")
+        return
+
+    lines = [f"📅 *{year}* — grouped by {group_by}"]
+    for key, cents in rows:
+        dollars = (cents or 0) / 100
+        lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
+
+    await message.answer("\n".join(lines), parse_mode="Markdown")

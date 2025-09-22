@@ -116,3 +116,39 @@ class ExpenseService:
             "breakdown": breakdown,
             "per_month": per_month,
         }
+    
+    async def monthly_details(self, user_id: int, year: int, month: int, group_by: str = "item"):
+        """
+        Return detailed breakdown for a month.
+        group_by = "item" → group by item_name
+        group_by = "category" → group by category
+        """
+        col = Expense.item_name if group_by == "item" else Expense.category
+        q = (
+            select(col.label("key"), func.sum(Expense.amount_cents).label("total_cents"))
+            .where(
+                extract("year", Expense.local_date) == year,
+                extract("month", Expense.local_date) == month,
+                Expense.user_id == user_id,
+            )
+            .group_by(col)
+            .order_by(func.sum(Expense.amount_cents).desc())
+        )
+        res = await self.db.execute(q)
+        rows = res.all()
+        return rows
+
+    async def yearly_details(self, user_id: int, year: int, group_by: str = "item"):
+        col = Expense.item_name if group_by == "item" else Expense.category
+        q = (
+            select(col.label("key"), func.sum(Expense.amount_cents).label("total_cents"))
+            .where(
+                extract("year", Expense.local_date) == year,
+                Expense.user_id == user_id,
+            )
+            .group_by(col)
+            .order_by(func.sum(Expense.amount_cents).desc())
+        )
+        res = await self.db.execute(q)
+        rows = res.all()
+        return rows
