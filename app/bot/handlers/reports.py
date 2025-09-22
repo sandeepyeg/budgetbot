@@ -201,7 +201,9 @@ async def search_expenses_cmd(message: Message, db: AsyncSession):
         dollars = exp.amount_cents / 100
         cat = f" · 🏷 {exp.category}" if exp.category else ""
         tags = f" · #{exp.tags.replace(',', ' #')}" if exp.tags else ""
-        lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date})")
+        note = f"\n    📝 {exp.notes}" if exp.notes else ""
+        lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date}){note}")
+
 
     await message.answer("\n".join(lines), parse_mode="Markdown")
 

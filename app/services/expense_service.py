@@ -190,3 +190,25 @@ class ExpenseService:
         await self.db.commit()
         await self.db.refresh(exp)
         return exp
+    
+    async def update_tags(self, *, expense_id: str, user_id: int, tags: str):
+        q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        res = await self.db.execute(q)
+        exp = res.scalar_one_or_none()
+        if not exp:
+            return None
+        exp.tags = tags
+        await self.db.commit()
+        await self.db.refresh(exp)
+        return exp
+
+    async def update_note(self, *, expense_id: str, user_id: int, note: str):
+        q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        res = await self.db.execute(q)
+        exp = res.scalar_one_or_none()
+        if not exp:
+            return None
+        exp.notes = note
+        await self.db.commit()
+        await self.db.refresh(exp)
+        return exp

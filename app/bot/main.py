@@ -30,6 +30,8 @@ async def on_startup(bot: Bot):
         BotCommand(command="yeardetails", description="Year details by item/category"),
         BotCommand(command="search", description="Search expenses"),
         BotCommand(command="receipt", description="Get receipt by expense_id"),
+        BotCommand(command="receipt", description="Get receipt by expense_id"),
+
     ])
     logger.info("Bot commands set.")
 
