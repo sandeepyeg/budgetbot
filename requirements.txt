@@ -1,0 +1,5 @@
+aiogram==3.13.1
+SQLAlchemy==2.0.35
+aiosqlite==0.20.0
+pydantic-settings==2.6.0
+loguru==0.7.2
