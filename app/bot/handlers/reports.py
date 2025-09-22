@@ -204,3 +204,33 @@ async def search_expenses_cmd(message: Message, db: AsyncSession):
         lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date})")
 
     await message.answer("\n".join(lines), parse_mode="Markdown")
+
+@router.message(Command("receipt"))
+async def get_receipt(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /receipt <expense_id>
+    Sends back the saved receipt if available.
+    """
+    parts = (message.text or "").split()
+    if len(parts) != 2:
+        await message.answer("Usage: /receipt <expense_id>")
+        return
+
+    expense_id = parts[1]
+    svc = ExpenseService(db)
+    exp = await svc.get_expense(expense_id)
+
+    if not exp or exp.user_id != message.from_user.id:
+        await message.answer("❌ Expense not found or not yours.")
+        return
+
+    if not exp.receipt_path:
+        await message.answer("No receipt attached to this expense.")
+        return
+
+    try:
+        with open(exp.receipt_path, "rb") as f:
+            await message.answer_photo(f, caption=f"Receipt for {exp.item_name} (${exp.amount_cents/100:.2f})")
+    except Exception:
+        await message.answer("⚠️ Could not load the receipt file. Maybe deleted from disk.")

@@ -9,7 +9,7 @@ from app.db.base import Base
 from app.bot.handlers.expenses import router as expenses_router
 from app.bot.handlers.categories import router as categories_router
 from app.bot.handlers.reports import router as reports_router
-
+from app.bot.handlers.receipts import router as receipts_router
 
 
 logger = setup_logging()
@@ -29,7 +29,7 @@ async def on_startup(bot: Bot):
         BotCommand(command="monthdetails", description="Month details by item/category"),
         BotCommand(command="yeardetails", description="Year details by item/category"),
         BotCommand(command="search", description="Search expenses"),
-
+        BotCommand(command="receipt", description="Get receipt by expense_id"),
     ])
     logger.info("Bot commands set.")
 
@@ -44,6 +44,8 @@ async def main():
     dp.include_router(expenses_router)
     dp.include_router(categories_router)
     dp.include_router(reports_router)
+    dp.include_router(receipts_router)
+
 
     await on_startup(bot)
     logger.info("🚀 Bot starting (long polling)...")

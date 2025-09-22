@@ -175,3 +175,18 @@ class ExpenseService:
         )
         res = await self.db.execute(q)
         return list(res.scalars().all())
+    
+    async def attach_receipt(self, expense_id: str, user_id: int, file_path: str):
+        """
+        Attach a receipt (file path) to an existing expense.
+        """
+        q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        res = await self.db.execute(q)
+        exp = res.scalar_one_or_none()
+        if not exp:
+            return None
+
+        exp.receipt_path = file_path
+        await self.db.commit()
+        await self.db.refresh(exp)
+        return exp

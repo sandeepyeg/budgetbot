@@ -15,7 +15,7 @@ class Expense(Base):
     category: Mapped[str | None] = mapped_column(String(50), nullable=True) # manual for now
     tags: Mapped[str | None] = mapped_column(String(200), nullable=True)    # comma-separated (upgrade later)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-
+    receipt_path: Mapped[str | None] = mapped_column(String(300), nullable=True) 
     created_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                      default=lambda: datetime.now(timezone.utc))
     local_date: Mapped[date] = mapped_column(Date, index=True)              # denormalized for fast month filters
