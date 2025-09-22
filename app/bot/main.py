@@ -8,6 +8,8 @@ from app.db.session import SessionLocal, engine
 from app.db.base import Base
 from app.bot.handlers.expenses import router as expenses_router
 from app.bot.handlers.categories import router as categories_router
+from app.bot.handlers.reports import router as reports_router
+
 
 
 logger = setup_logging()
@@ -22,6 +24,7 @@ async def on_startup(bot: Bot):
         BotCommand(command="add", description="Add expense: /add <item> <amount> [#category] [#tag]"),
         BotCommand(command="categories", description="List categories"),
         BotCommand(command="setcategory", description="Set category for an expense"),
+        BotCommand(command="month", description="Monthly report: /month [year month]"),
     ])
     logger.info("Bot commands set.")
 
@@ -35,6 +38,7 @@ async def main():
 
     dp.include_router(expenses_router)
     dp.include_router(categories_router)
+    dp.include_router(reports_router)
 
     await on_startup(bot)
     logger.info("🚀 Bot starting (long polling)...")

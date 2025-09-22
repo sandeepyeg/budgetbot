@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Expense
 from app.utils.dates import local_date_for_now
@@ -44,3 +44,33 @@ class ExpenseService:
         await self.db.commit()
         await self.db.refresh(exp)
         return exp
+
+    async def monthly_summary(self, user_id: int, year: int, month: int):
+        """
+        Returns total + breakdown by category for given user, year, month.
+        """
+        q = (
+            select(
+                func.sum(Expense.amount_cents).label("total_cents"),
+                Expense.category,
+                func.sum(Expense.amount_cents).label("cat_total_cents"),
+            )
+            .where(
+                Expense.user_id == user_id,
+                func.strftime("%Y", Expense.local_date) == str(year),
+                func.strftime("%m", Expense.local_date) == f"{month:02d}",
+            )
+            .group_by(Expense.category)
+        )
+        res = await self.db.execute(q)
+        rows = res.all()
+
+        total = sum([row.cat_total_cents or 0 for row in rows]) if rows else 0
+        breakdown = {row.category or "Uncategorized": row.cat_total_cents for row in rows}
+
+        return {
+            "year": year,
+            "month": month,
+            "total_cents": total,
+            "breakdown": breakdown,
+        }
