@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.expense_service import ExpenseService
 from app.services.category_service import CategoryService
-from app.utils.parser import parse_item_and_amount, extract_hashtags
+from app.utils.parser import parse_item_and_amount, extract_hashtags, extract_note
 
 router = Router(name="expenses")
 
@@ -36,6 +36,7 @@ async def add_cmd(message: Message, db: AsyncSession):
 
     item, cents = parsed
     hashtags = extract_hashtags(payload)
+    note = extract_note(payload)
     cat_token, tags_csv = _split_category_and_tags(hashtags)
 
     category_name = None
@@ -50,7 +51,8 @@ async def add_cmd(message: Message, db: AsyncSession):
         item_name=item,
         amount_cents=cents,
         category=category_name,
-        tags=tags_csv
+        tags=tags_csv,
+        notes=note
     )
     dollars = cents / 100
     suffix = f" · 🏷 {category_name}" if category_name else ""
@@ -71,6 +73,7 @@ async def add_free_text(message: Message, db: AsyncSession):
 
     item, cents = parsed
     hashtags = extract_hashtags(message.text or "")
+    note = extract_note(message.text or "")
     cat_token, tags_csv = _split_category_and_tags(hashtags)
 
     category_name = None
@@ -85,7 +88,8 @@ async def add_free_text(message: Message, db: AsyncSession):
         item_name=item,
         amount_cents=cents,
         category=category_name,
-        tags=tags_csv
+        tags=tags_csv,
+        notes=note
     )
     dollars = cents / 100
     suffix = f" · 🏷 {category_name}" if category_name else ""
