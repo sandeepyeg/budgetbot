@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, DateTime, Date, BigInteger, Text
+from sqlalchemy import String, Integer, DateTime, Date, BigInteger, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, timezone, date
 import uuid
@@ -19,3 +19,17 @@ class Expense(Base):
     created_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                      default=lambda: datetime.now(timezone.utc))
     local_date: Mapped[date] = mapped_column(Date, index=True)              # denormalized for fast month filters
+
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("slug", name="uq_categories_slug"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Optional: per-user categories in future; keep column now (nullable) for flexibility
+    user_id: Mapped[int | None] = mapped_column(BigInteger, index=True, nullable=True)
+
+    name: Mapped[str] = mapped_column(String(50))    # canonical display name, e.g., "Food"
+    slug: Mapped[str] = mapped_column(String(60), index=True)  # e.g., "food"
+    created_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
