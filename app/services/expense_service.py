@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
-from sqlalchemy import extract, func, select, update
+from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Expense
 from app.utils.dates import local_date_for_now
+import pandas as pd
 
 class ExpenseService:
     def __init__(self, db: AsyncSession):
@@ -212,3 +213,35 @@ class ExpenseService:
         await self.db.commit()
         await self.db.refresh(exp)
         return exp
+    
+    async def export_expenses(self, user_id: int, year: int | None = None, month: int | None = None):
+        """
+        Return a Pandas DataFrame of expenses for export.
+        """
+        q = select(Expense).where(Expense.user_id == user_id)
+        if year:
+            q = q.where(extract("year", Expense.local_date) == year)
+        if month:
+            q = q.where(extract("month", Expense.local_date) == month)
+
+        q = q.order_by(Expense.local_date.asc())
+        res = await self.db.execute(q)
+        rows = res.scalars().all()
+
+        if not rows:
+            return None
+
+        data = []
+        for e in rows:
+            data.append({
+                "ID": e.id,
+                "Date": e.local_date.isoformat(),
+                "Item": e.item_name,
+                "Amount": f"{e.amount_cents/100:.2f} {e.currency}",
+                "Category": e.category or "",
+                "Tags": e.tags or "",
+                "Notes": e.notes or "",
+                "Receipt": e.receipt_path or "",
+            })
+        df = pd.DataFrame(data)
+        return df
