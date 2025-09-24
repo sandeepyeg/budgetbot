@@ -32,7 +32,11 @@ async def on_startup(bot: Bot):
         BotCommand(command="receipt", description="Get receipt by expense_id"),
         BotCommand(command="receipt", description="Get receipt by expense_id"),
         BotCommand(command="export", description="Export expenses as CSV/Excel"),
-
+        BotCommand(command="recurring", description="Recurring help"),
+        BotCommand(command="recurring_list", description="List recurring"),
+        BotCommand(command="recurring_cancel", description="Cancel recurring"),
+        BotCommand(command="recurring_pause", description="Pause recurring"),
+        BotCommand(command="recurring_resume", description="Resume recurring"),
     ])
     logger.info("Bot commands set.")
 
