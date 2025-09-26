@@ -236,3 +236,78 @@ async def get_receipt(message: Message, db: AsyncSession):
             await message.answer_photo(f, caption=f"Receipt for {exp.item_name} (${exp.amount_cents/100:.2f})")
     except Exception:
         await message.answer("⚠️ Could not load the receipt file. Maybe deleted from disk.")
+
+@router.message(Command("compare"))
+async def compare_expenses(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /compare month                 → this month vs last month
+      /compare year                  → this year vs last year
+      /compare 2025 9 2025 8         → explicit months (year1 month1 year2 month2)
+      /compare 2025 2024             → explicit years
+    """
+    parts = (message.text or "").split()
+    now = datetime.now()
+    svc = ExpenseService(db)
+
+    if len(parts) == 2 and parts[1].lower() == "month":
+        y1, m1 = now.year, now.month
+        # handle last month wrap
+        prev_year, prev_month = (y1 - 1, 12) if m1 == 1 else (y1, m1 - 1)
+        cur = await svc.totals_for_period(message.from_user.id, y1, m1)
+        prev = await svc.totals_for_period(message.from_user.id, prev_year, prev_month)
+        cmp = svc.compare_periods(cur, prev)
+        title = f"{y1}-{m1:02d} vs {prev_year}-{prev_month:02d}"
+
+    elif len(parts) == 2 and parts[1].lower() == "year":
+        y1, y0 = now.year, now.year - 1
+        cur = await svc.totals_for_period(message.from_user.id, y1)
+        prev = await svc.totals_for_period(message.from_user.id, y0)
+        cmp = svc.compare_periods(cur, prev)
+        title = f"{y1} vs {y0}"
+
+    elif len(parts) == 5:
+        try:
+            y1, m1, y0, m0 = int(parts[1]), int(parts[2]), int(parts[3]), int(parts[4])
+        except ValueError:
+            await message.answer("Usage: /compare <y1 m1 y0 m0>")
+            return
+        cur = await svc.totals_for_period(message.from_user.id, y1, m1)
+        prev = await svc.totals_for_period(message.from_user.id, y0, m0)
+        cmp = svc.compare_periods(cur, prev)
+        title = f"{y1}-{m1:02d} vs {y0}-{m0:02d}"
+
+    elif len(parts) == 3:
+        try:
+            y1, y0 = int(parts[1]), int(parts[2])
+        except ValueError:
+            await message.answer("Usage: /compare <year1 year0>")
+            return
+        cur = await svc.totals_for_period(message.from_user.id, y1)
+        prev = await svc.totals_for_period(message.from_user.id, y0)
+        cmp = svc.compare_periods(cur, prev)
+        title = f"{y1} vs {y0}"
+
+    else:
+        await message.answer("Usage:\n"
+                             "/compare month\n"
+                             "/compare year\n"
+                             "/compare 2025 9 2025 8\n"
+                             "/compare 2025 2024")
+        return
+
+    # format result
+    lines = [f"📊 *Comparison: {title}*"]
+    total = cmp["total"]
+    arrow = "📈" if total["diff"] > 0 else ("📉" if total["diff"] < 0 else "➡️")
+    pct = f"({total['pct']:.1f}%)" if total["pct"] is not None else ""
+    lines.append(f"💰 Total: {arrow} {total['current']/100:.2f} vs {total['previous']/100:.2f} {pct}")
+
+    lines.append("\n🏷 *By Category*")
+    for cat, vals in cmp["categories"].items():
+        arrow = "📈" if vals["diff"] > 0 else ("📉" if vals["diff"] < 0 else "➡️")
+        pct = f"({vals['pct']:.1f}%)" if vals["pct"] is not None else ""
+        lines.append(f"- {cat}: {arrow} {vals['current']/100:.2f} vs {vals['previous']/100:.2f} {pct}")
+
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
