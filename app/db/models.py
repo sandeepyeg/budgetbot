@@ -68,3 +68,19 @@ class Category(Base):
     created_at_utc: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+
+    scope_type: Mapped[str] = mapped_column(String(20))  # "overall" | "category"
+    scope_value: Mapped[str | None] = mapped_column(String(50))  # e.g. "Food" if scope_type=category
+
+    limit_cents: Mapped[int] = mapped_column(Integer)  # budget limit
+    period: Mapped[str] = mapped_column(String(20))  # "month" | "year"
+
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

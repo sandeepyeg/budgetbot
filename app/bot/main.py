@@ -10,6 +10,7 @@ from app.bot.handlers.expenses import router as expenses_router
 from app.bot.handlers.categories import router as categories_router
 from app.bot.handlers.reports import router as reports_router
 from app.bot.handlers.receipts import router as receipts_router
+from app.bot.handlers.budgets import router as budgets_router
 
 
 logger = setup_logging()
@@ -39,6 +40,10 @@ async def on_startup(bot: Bot):
         BotCommand(command="recurring_resume", description="Resume recurring"),
         BotCommand(command="compare", description="Compare expenses (month/year)"),
         BotCommand(command="chart", description="Charts: month, year, yeartrend"),
+        BotCommand(command="budget", description="Budget help"),
+        BotCommand(command="budget_add", description="Add a budget"),
+        BotCommand(command="budget_list", description="List budgets"),
+        BotCommand(command="budget_delete", description="Delete a budget"),
     ])
     logger.info("Bot commands set.")
 
@@ -54,6 +59,8 @@ async def main():
     dp.include_router(categories_router)
     dp.include_router(reports_router)
     dp.include_router(receipts_router)
+    dp.include_router(budgets_router)
+
 
 
     await on_startup(bot)

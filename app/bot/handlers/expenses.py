@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
+from app.services.budget_service import BudgetService
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.expense_service import ExpenseService
 from app.services.category_service import CategoryService
@@ -48,8 +49,12 @@ async def add_cmd(message: Message, db: AsyncSession):
         amount_cents=cents,
         category=category_name,
         tags=tags_csv,
-        notes=note
+        notes=note,
     )
+    bsvc = BudgetService(db)
+    alerts = await bsvc.check_alerts(message.from_user.id, svc)
+    for alert in alerts:
+        await message.answer(alert)
 
     dollars = cents / 100
     msg = f"✅ Added: *{item}* — ${dollars:.2f}"
