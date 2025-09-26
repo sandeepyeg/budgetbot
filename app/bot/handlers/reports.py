@@ -1,6 +1,7 @@
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
+from app.core.charts import bar_chart_by_month, pie_chart_by_category
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from app.services.expense_service import ExpenseService
@@ -311,3 +312,44 @@ async def compare_expenses(message: Message, db: AsyncSession):
 
     await message.answer("\n".join(lines), parse_mode="Markdown")
 
+@router.message(Command("chart"))
+async def chart_expenses(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /chart month            → pie chart by category (this month)
+      /chart year             → pie chart by category (this year)
+      /chart yeartrend        → bar chart by month (this year)
+    """
+    parts = (message.text or "").split()
+    now = datetime.now()
+    svc = ExpenseService(db)
+
+    if len(parts) == 2 and parts[1].lower() == "month":
+        data = await svc.monthly_summary(message.from_user.id, now.year, now.month)
+        if data["total_cents"] == 0:
+            await message.answer("No data for this month.")
+            return
+        buf = pie_chart_by_category(data["breakdown"], f"{now.year}-{now.month:02d} Expenses by Category")
+        await message.answer_photo(buf)
+
+    elif len(parts) == 2 and parts[1].lower() == "year":
+        data = await svc.yearly_summary(message.from_user.id, now.year)
+        if data["total_cents"] == 0:
+            await message.answer("No data for this year.")
+            return
+        buf = pie_chart_by_category(data["breakdown"], f"{now.year} Expenses by Category")
+        await message.answer_photo(buf)
+
+    elif len(parts) == 2 and parts[1].lower() == "yeartrend":
+        data = await svc.yearly_summary(message.from_user.id, now.year)
+        if not data["per_month"]:
+            await message.answer("No data for this year.")
+            return
+        buf = bar_chart_by_month(data["per_month"], f"{now.year} Monthly Spending Trend")
+        await message.answer_photo(buf)
+
+    else:
+        await message.answer("Usage:\n"
+                             "/chart month\n"
+                             "/chart year\n"
+                             "/chart yeartrend")

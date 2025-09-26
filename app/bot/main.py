@@ -38,6 +38,7 @@ async def on_startup(bot: Bot):
         BotCommand(command="recurring_pause", description="Pause recurring"),
         BotCommand(command="recurring_resume", description="Resume recurring"),
         BotCommand(command="compare", description="Compare expenses (month/year)")
+        BotCommand(command="chart", description="Charts: month, year, yeartrend"),
     ])
     logger.info("Bot commands set.")
 
