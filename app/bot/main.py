@@ -13,6 +13,7 @@ from app.bot.handlers.receipts import router as receipts_router
 from app.bot.handlers.budgets import router as budgets_router
 from app.bot.handlers.rules import router as rules_router
 from app.bot.handlers.nlp import router as nlp_router
+from app.bot.handlers.forecast import router as forecast_router
 
 
 logger = setup_logging()
@@ -51,6 +52,7 @@ async def on_startup(bot: Bot):
         BotCommand(command="rules_add", description="Add a keyword rule"),
         BotCommand(command="rules_delete", description="Delete a rule"),
         BotCommand(command="ask", description="Ask natural language queries"),
+        BotCommand(command="forecast", description="Forecast next month’s expenses"),
     ])
     logger.info("Bot commands set.")
 
@@ -69,6 +71,7 @@ async def main():
     dp.include_router(budgets_router)
     dp.include_router(nlp_router)
     dp.include_router(rules_router)
+    dp.include_router(forecast_router)
 
 
     await on_startup(bot)
