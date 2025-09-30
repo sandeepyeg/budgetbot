@@ -301,3 +301,22 @@ class ExpenseService:
             }
         result["categories"] = cat_changes
         return result
+
+    async def week_summary(self, user_id: int, year: int, week: int):
+        """
+        Returns total + breakdown for a given ISO week.
+        """
+        q = select(
+            func.sum(Expense.amount_cents).label("total_cents"),
+            Expense.category,
+            func.sum(Expense.amount_cents).label("cat_total_cents"),
+        ).where(Expense.user_id == user_id,
+                extract("year", Expense.local_date) == year,
+                extract("week", Expense.local_date) == week
+        ).group_by(Expense.category)
+
+        res = await self.db.execute(q)
+        rows = res.all()
+        total = sum([r.cat_total_cents or 0 for r in rows]) if rows else 0
+        breakdown = {r.category or "Uncategorized": r.cat_total_cents for r in rows}
+        return {"year": year, "week": week, "total_cents": total, "breakdown": breakdown}
