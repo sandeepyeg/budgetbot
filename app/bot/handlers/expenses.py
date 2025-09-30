@@ -40,7 +40,14 @@ async def add_cmd(message: Message, db: AsyncSession):
         cs = CategoryService(db)
         cat = await cs.get_or_create(cat_token)
         category_name = cat.name
-
+    if not category_name:
+        from app.services.rule_service import RuleService
+        rsvc = RuleService(db)
+        suggested = await rsvc.suggest_category(message.from_user.id, item)
+        if suggested:
+            cs = CategoryService(db)
+            cat = await cs.get_or_create(suggested)
+            category_name = cat.name
     svc = ExpenseService(db)
     exp = await svc.add_expense_text(
         user_id=message.from_user.id,
@@ -98,6 +105,14 @@ async def add_free_text(message: Message, db: AsyncSession):
         cs = CategoryService(db)
         cat = await cs.get_or_create(cat_token)
         category_name = cat.name
+    if not category_name:
+        from app.services.rule_service import RuleService
+        rsvc = RuleService(db)
+        suggested = await rsvc.suggest_category(message.from_user.id, item)
+        if suggested:
+            cs = CategoryService(db)
+            cat = await cs.get_or_create(suggested)
+            category_name = cat.name
 
     svc = ExpenseService(db)
     exp = await svc.add_expense_text(

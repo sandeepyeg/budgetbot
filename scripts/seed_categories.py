@@ -10,7 +10,7 @@ async def run():
     async with SessionLocal() as session:
         cs = CategoryService(session)
         await cs.seed_defaults()
-        print("✅ Categories seeded")
+        print("✅ Global categories seeded: Food, Transport, Health, Shopping, Bills, Entertainment")
 
 if __name__ == "__main__":
     asyncio.run(run())

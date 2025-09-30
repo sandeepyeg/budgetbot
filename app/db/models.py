@@ -68,3 +68,16 @@ class Category(Base):
     created_at_utc: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+class CategoryRule(Base):
+    __tablename__ = "category_rules"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    keyword: Mapped[str] = mapped_column(String(50), index=True)
+    category: Mapped[str] = mapped_column(String(50))
+    created_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

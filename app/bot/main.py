@@ -10,6 +10,7 @@ from app.bot.handlers.expenses import router as expenses_router
 from app.bot.handlers.categories import router as categories_router
 from app.bot.handlers.reports import router as reports_router
 from app.bot.handlers.receipts import router as receipts_router
+from app.bot.handlers.rules import router as rules_router
 
 
 logger = setup_logging()
@@ -37,6 +38,10 @@ async def on_startup(bot: Bot):
         BotCommand(command="recurring_cancel", description="Cancel recurring"),
         BotCommand(command="recurring_pause", description="Pause recurring"),
         BotCommand(command="recurring_resume", description="Resume recurring"),
+        BotCommand(command="rules", description="Rules help"),
+        BotCommand(command="rules_list", description="List your rules"),
+        BotCommand(command="rules_add", description="Add a keyword rule"),
+        BotCommand(command="rules_delete", description="Delete a rule"),
     ])
     logger.info("Bot commands set.")
 
@@ -52,6 +57,7 @@ async def main():
     dp.include_router(categories_router)
     dp.include_router(reports_router)
     dp.include_router(receipts_router)
+    dp.include_router(rules_router)
 
 
     await on_startup(bot)

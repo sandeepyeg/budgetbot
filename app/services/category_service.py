@@ -19,12 +19,15 @@ class CategoryService:
         res = await self.db.execute(q)
         return res.scalar_one_or_none()
 
-    async def get_or_create(self, name: str) -> Category:
-        slug = slugify(name)
-        existing = await self.get_by_slug(slug)
-        if existing:
-            return existing
-        cat = Category(user_id=None, name=name.strip()[:50], slug=slug)
+    async def get_or_create(self, name: str):
+        slug = name.lower().strip()
+        q = select(Category).where(Category.slug == slug)
+        res = await self.db.execute(q)
+        cat = res.scalar_one_or_none()
+        if cat:
+            return cat
+
+        cat = Category(name=name, slug=slug)
         self.db.add(cat)
         await self.db.commit()
         await self.db.refresh(cat)
@@ -36,5 +39,12 @@ class CategoryService:
         return list(res.scalars().all())
 
     async def seed_defaults(self):
-        for n in DEFAULT_GLOBAL_CATEGORIES:
-            await self.get_or_create(n)
+        """
+        Ensure all global default categories exist.
+        """
+        default_names = [
+            "Food", "Transport", "Health", "Shopping", "Bills", "Entertainment"
+        ]
+
+        for name in default_names:
+            await self.get_or_create(name)
