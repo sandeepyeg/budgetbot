@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message
+from app.services.budget_service import BudgetService
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.expense_service import ExpenseService
 from app.services.category_service import CategoryService
@@ -46,6 +47,10 @@ async def add_expense_with_receipt(message: Message, db: AsyncSession):
         category=category_name,
         tags=tags_csv
     )
+    bsvc = BudgetService(db)
+    alerts = await bsvc.check_alerts(message.from_user.id, svc)
+    for alert in alerts:
+        await message.answer(alert)
 
     # --- Receipt handling ---
     photo = message.photo[-1]  # highest resolution

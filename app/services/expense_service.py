@@ -245,3 +245,59 @@ class ExpenseService:
             })
         df = pd.DataFrame(data)
         return df
+    
+    async def totals_for_period(self, user_id: int, year: int, month: int | None = None):
+        """
+        Return total + breakdown for a given period (month OR year).
+        """
+        q = select(
+            func.sum(Expense.amount_cents).label("total_cents"),
+            Expense.category,
+            func.sum(Expense.amount_cents).label("cat_total_cents"),
+        ).where(Expense.user_id == user_id)
+
+        if month:
+            q = q.where(
+                extract("year", Expense.local_date) == year,
+                extract("month", Expense.local_date) == month
+            )
+        else:
+            q = q.where(extract("year", Expense.local_date) == year)
+
+        q = q.group_by(Expense.category)
+        res = await self.db.execute(q)
+        rows = res.all()
+
+        total = sum([r.cat_total_cents or 0 for r in rows]) if rows else 0
+        breakdown = {r.category or "Uncategorized": r.cat_total_cents for r in rows}
+        return {"total": total, "breakdown": breakdown}
+    
+    def compare_periods(self, current: dict, previous: dict):
+        """
+        Compare two periods (both dicts from totals_for_period).
+        Returns difference totals and per-category changes.
+        """
+        result = {}
+        cur_total, prev_total = current["total"], previous["total"]
+        result["total"] = {
+            "current": cur_total,
+            "previous": prev_total,
+            "diff": cur_total - prev_total,
+            "pct": ((cur_total - prev_total) / prev_total * 100) if prev_total > 0 else None,
+        }
+
+        categories = set(current["breakdown"].keys()) | set(previous["breakdown"].keys())
+        cat_changes = {}
+        for cat in categories:
+            cur_val = current["breakdown"].get(cat, 0) or 0
+            prev_val = previous["breakdown"].get(cat, 0) or 0
+            diff = cur_val - prev_val
+            pct = ((diff) / prev_val * 100) if prev_val > 0 else None
+            cat_changes[cat] = {
+                "current": cur_val,
+                "previous": prev_val,
+                "diff": diff,
+                "pct": pct,
+            }
+        result["categories"] = cat_changes
+        return result
