@@ -36,6 +36,7 @@ async def db_session_middleware(handler, event, data):
 async def on_startup(bot: Bot):
     await bot.set_my_commands([
         BotCommand(command="start", description="Start and quick actions"),
+        BotCommand(command="menu", description="Show main menu keyboard"),
         BotCommand(command="add", description="Add expense: /add <item> <amount> [#category] [#tag]"),
         BotCommand(command="split", description="Split expense: /split <item> <Cat:Amt,...> [pm:method]"),
         BotCommand(command="undo", description="Undo last expense"),
