@@ -1,4 +1,5 @@
 from aiogram import Router, F
+import contextlib
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,12 @@ from app.utils.text import short_ref
 
 router = Router(name="recurring")
 
+
+def _back_to_menu_inline_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="⬅️ Back to Menu", callback_data="nav:menu")]]
+    )
+
 @router.message(Command("recurring"))
 async def recurring_help(message: Message):
     await message.answer(
@@ -16,7 +23,7 @@ async def recurring_help(message: Message):
         "/recurring_cancel <ref> → cancel permanently\n"
         "/recurring_pause <ref> → pause temporarily\n"
         "/recurring_resume <ref> → resume paused"
-    , reply_markup=main_menu_kb())
+    , reply_markup=_back_to_menu_inline_kb())
 
 
 @router.message(Command("recurring_list"))
@@ -24,7 +31,7 @@ async def recurring_list(message: Message, db: AsyncSession):
     svc = RecurringService(db)
     recs = await svc.list_all(message.from_user.id)
     if not recs:
-        await message.answer("No recurring expenses.")
+        await message.answer("No recurring expenses.", reply_markup=_back_to_menu_inline_kb())
         return
 
     lines = ["📆 Recurring expenses:"]
@@ -51,6 +58,7 @@ async def recurring_list(message: Message, db: AsyncSession):
         row.append(InlineKeyboardButton(text=f"❌ Cancel {ref}", callback_data=f"recurring:cancel:{ref}"))
         inline_rows.append(row)
 
+    inline_rows.append([InlineKeyboardButton(text="⬅️ Back to Menu", callback_data="nav:menu")])
     await message.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_rows))
 
 
@@ -62,8 +70,9 @@ async def recurring_quick_action(callback: CallbackQuery, db: AsyncSession):
     if action == "pause":
         rec = await svc.update_state(ref, callback.from_user.id, paused=True)
         if rec:
-            await callback.answer("Paused")
-            await callback.message.answer("⏸ Recurring expense paused.", reply_markup=main_menu_kb())
+            with contextlib.suppress(Exception):
+                await callback.message.edit_reply_markup(reply_markup=None)
+            await callback.answer("⏸ Paused")
         else:
             await callback.answer("Not found", show_alert=True)
         return
@@ -71,16 +80,18 @@ async def recurring_quick_action(callback: CallbackQuery, db: AsyncSession):
     if action == "resume":
         rec = await svc.update_state(ref, callback.from_user.id, paused=False)
         if rec:
-            await callback.answer("Resumed")
-            await callback.message.answer("▶️ Recurring expense resumed.", reply_markup=main_menu_kb())
+            with contextlib.suppress(Exception):
+                await callback.message.edit_reply_markup(reply_markup=None)
+            await callback.answer("▶️ Resumed")
         else:
             await callback.answer("Not found", show_alert=True)
         return
 
     rec = await svc.update_state(ref, callback.from_user.id, active=False)
     if rec:
-        await callback.answer("Cancelled")
-        await callback.message.answer("❌ Recurring expense cancelled.", reply_markup=main_menu_kb())
+        with contextlib.suppress(Exception):
+            await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer("❌ Cancelled")
     else:
         await callback.answer("Not found", show_alert=True)
 

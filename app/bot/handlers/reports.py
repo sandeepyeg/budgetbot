@@ -78,6 +78,12 @@ def _search_chip_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _back_to_menu_inline_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="⬅️ Back to Menu", callback_data="nav:menu")]]
+    )
+
+
 def _month_details_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -112,7 +118,7 @@ async def _send_month_report(target: Message, db: AsyncSession, user_id: int, ye
     svc = ExpenseService(db)
     summary = await svc.monthly_summary(user_id=user_id, year=year, month=month)
     if summary["total_cents"] == 0:
-        await target.answer(f"📊 No expenses found for {year}-{month:02d}.")
+        await target.answer(f"📊 No expenses found for {year}-{month:02d}.", reply_markup=_back_to_menu_inline_kb())
         return
 
     total_dollars = summary["total_cents"] / 100
@@ -120,14 +126,14 @@ async def _send_month_report(target: Message, db: AsyncSession, user_id: int, ye
     for cat, cents in summary["breakdown"].items():
         dollars = (cents or 0) / 100
         lines.append(f" - {cat}: ${dollars:.2f}")
-    await target.answer("\n".join(lines), parse_mode="Markdown")
+    await target.answer("\n".join(lines), parse_mode="Markdown", reply_markup=_back_to_menu_inline_kb())
 
 
 async def _send_year_report(target: Message, db: AsyncSession, user_id: int, year: int):
     svc = ExpenseService(db)
     summary = await svc.yearly_summary(user_id=user_id, year=year)
     if summary["total_cents"] == 0:
-        await target.answer(f"📊 No expenses found for {year}.")
+        await target.answer(f"📊 No expenses found for {year}.", reply_markup=_back_to_menu_inline_kb())
         return
 
     total_dollars = summary["total_cents"] / 100
@@ -141,14 +147,14 @@ async def _send_year_report(target: Message, db: AsyncSession, user_id: int, yea
             if m in summary["per_month"]:
                 dollars = summary["per_month"][m] / 100
                 lines.append(f" - {year}-{m:02d}: ${dollars:.2f}")
-    await target.answer("\n".join(lines), parse_mode="Markdown")
+    await target.answer("\n".join(lines), parse_mode="Markdown", reply_markup=_back_to_menu_inline_kb())
 
 
 async def _send_search_results(target: Message, db: AsyncSession, user_id: int, keyword: str):
     svc = ExpenseService(db)
     results = await svc.search_expenses(user_id, keyword)
     if not results:
-        await target.answer(f"No expenses found for: {keyword}")
+        await target.answer(f"No expenses found for: {keyword}", reply_markup=_back_to_menu_inline_kb())
         return
 
     lines = [f"🔍 Results for *{keyword}* (latest {len(results)})"]
@@ -158,35 +164,35 @@ async def _send_search_results(target: Message, db: AsyncSession, user_id: int, 
         tags = f" · #{exp.tags.replace(',', ' #')}" if exp.tags else ""
         note = f"\n    📝 {exp.notes}" if exp.notes else ""
         lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date}){note}")
-    await target.answer("\n".join(lines), parse_mode="Markdown")
+    await target.answer("\n".join(lines), parse_mode="Markdown", reply_markup=_back_to_menu_inline_kb())
 
 
 async def _send_month_details(target: Message, db: AsyncSession, user_id: int, year: int, month: int, group_by: str):
     svc = ExpenseService(db)
     rows = await svc.monthly_details(user_id, year, month, group_by)
     if not rows:
-        await target.answer(f"No expenses found for {year}-{month:02d}.")
+        await target.answer(f"No expenses found for {year}-{month:02d}.", reply_markup=_back_to_menu_inline_kb())
         return
 
     lines = [f"📅 *{year}-{month:02d}* — grouped by {group_by}"]
     for key, cents in rows:
         dollars = (cents or 0) / 100
         lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
-    await target.answer("\n".join(lines), parse_mode="Markdown")
+    await target.answer("\n".join(lines), parse_mode="Markdown", reply_markup=_back_to_menu_inline_kb())
 
 
 async def _send_year_details(target: Message, db: AsyncSession, user_id: int, year: int, group_by: str):
     svc = ExpenseService(db)
     rows = await svc.yearly_details(user_id, year, group_by)
     if not rows:
-        await target.answer(f"No expenses found for {year}.")
+        await target.answer(f"No expenses found for {year}.", reply_markup=_back_to_menu_inline_kb())
         return
 
     lines = [f"📅 *{year}* — grouped by {group_by}"]
     for key, cents in rows:
         dollars = (cents or 0) / 100
         lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
-    await target.answer("\n".join(lines), parse_mode="Markdown")
+    await target.answer("\n".join(lines), parse_mode="Markdown", reply_markup=_back_to_menu_inline_kb())
 
 
 async def _send_quick_export(target: Message, db: AsyncSession, user_id: int, file_format: str, period: str):
@@ -197,7 +203,7 @@ async def _send_quick_export(target: Message, db: AsyncSession, user_id: int, fi
     svc = ExpenseService(db)
     df = await svc.export_expenses(user_id, year=year, month=month)
     if df is None:
-        await target.answer("No expenses found for the selected period.")
+        await target.answer("No expenses found for the selected period.", reply_markup=_back_to_menu_inline_kb())
         return
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -213,7 +219,7 @@ async def _send_quick_export(target: Message, db: AsyncSession, user_id: int, fi
         filename = f"expenses_{period_label}_{stamp}.csv"
 
     document = BufferedInputFile(data, filename=filename)
-    await target.answer_document(document, caption=f"📦 Export ready: {filename}")
+    await target.answer_document(document, caption=f"📦 Export ready: {filename}", reply_markup=_back_to_menu_inline_kb())
 
 @router.message(Command("month"))
 async def month_report(message: Message, db: AsyncSession):
@@ -283,7 +289,6 @@ async def report_period_quick(callback: CallbackQuery, db: AsyncSession):
         y = now.year if when == "current" else now.year - 1
         await _send_year_report(callback.message, db, callback.from_user.id, y)
 
-    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
     await callback.answer()
 
 @router.message(Command("monthdetails"))
@@ -361,7 +366,6 @@ async def details_quick(callback: CallbackQuery, db: AsyncSession):
         y = now.year if when == "current" else now.year - 1
         await _send_year_details(callback.message, db, callback.from_user.id, y, group_by)
 
-    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
     await callback.answer()
 
 
@@ -385,7 +389,12 @@ async def search_expenses_cmd(message: Message, db: AsyncSession):
 async def search_quick(callback: CallbackQuery, db: AsyncSession):
     keyword = callback.data.split(":", 2)[2]
     await _send_search_results(callback.message, db, callback.from_user.id, keyword)
-    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "nav:menu")
+async def nav_to_menu(callback: CallbackQuery):
+    await callback.message.answer("📋 Main menu", reply_markup=main_menu_kb())
     await callback.answer()
 
 @router.message(Command("receipt"))
@@ -520,7 +529,7 @@ async def compare_quick(callback: CallbackQuery, db: AsyncSession):
         pct = f"({vals['pct']:.1f}%)" if vals["pct"] is not None else ""
         lines.append(f"- {cat}: {arrow} {vals['current']/100:.2f} vs {vals['previous']/100:.2f} {pct}")
 
-    await callback.message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=main_menu_kb())
+    await callback.message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=_back_to_menu_inline_kb())
     await callback.answer()
 
 @router.message(Command("chart"))
@@ -671,5 +680,4 @@ async def export_expenses_cmd(message: Message, db: AsyncSession):
 async def export_quick(callback: CallbackQuery, db: AsyncSession):
     _, file_format, period = callback.data.split(":")
     await _send_quick_export(callback.message, db, callback.from_user.id, file_format, period)
-    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
     await callback.answer()

@@ -1,4 +1,5 @@
 from aiogram import Router, F
+import contextlib
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -125,8 +126,9 @@ async def rules_delete_quick(callback: CallbackQuery, db: AsyncSession):
     svc = RuleService(db)
     deleted = await svc.delete_rule(callback.from_user.id, ref)
     if deleted:
-        await callback.answer("Rule deleted")
-        await callback.message.answer("✅ Rule deleted.")
+        with contextlib.suppress(Exception):
+            await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer("✅ Rule deleted")
     else:
         await callback.answer("Rule not found", show_alert=True)
 

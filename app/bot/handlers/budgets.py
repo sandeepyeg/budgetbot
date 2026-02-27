@@ -1,4 +1,5 @@
 from aiogram import Router, F
+import contextlib
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -205,8 +206,9 @@ async def budget_delete_quick(callback: CallbackQuery, db: AsyncSession):
     svc = BudgetService(db)
     deleted = await svc.delete_budget(ref, callback.from_user.id)
     if deleted:
-        await callback.answer("Budget deleted")
-        await callback.message.answer("✅ Budget deleted.")
+        with contextlib.suppress(Exception):
+            await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer("✅ Budget deleted")
     else:
         await callback.answer("Budget not found", show_alert=True)
 
