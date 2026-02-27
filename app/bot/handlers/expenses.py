@@ -45,6 +45,29 @@ def _skip_cancel_kb() -> ReplyKeyboardMarkup:
     )
 
 
+def _category_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Food"), KeyboardButton(text="Transport")],
+            [KeyboardButton(text="Shopping"), KeyboardButton(text="Bills")],
+            [KeyboardButton(text="Health"), KeyboardButton(text="Entertainment")],
+            [KeyboardButton(text="⏭ Skip"), KeyboardButton(text="❌ Cancel")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def _payment_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="card"), KeyboardButton(text="cash")],
+            [KeyboardButton(text="transfer"), KeyboardButton(text="upi")],
+            [KeyboardButton(text="⏭ Skip"), KeyboardButton(text="❌ Cancel")],
+        ],
+        resize_keyboard=True,
+    )
+
+
 def _edit_field_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -207,7 +230,7 @@ async def add_flow_amount(message: Message, state: FSMContext):
         return
     await state.update_data(cents=cents)
     await state.set_state(AddExpenseFlow.category)
-    await message.answer("Category? (or tap Skip)", reply_markup=_skip_cancel_kb())
+    await message.answer("Category? Choose one below or skip.", reply_markup=_category_kb())
 
 
 @router.message(AddExpenseFlow.category, F.text)
@@ -220,7 +243,7 @@ async def add_flow_category(message: Message, state: FSMContext):
     category = None if text == "⏭ Skip" else text
     await state.update_data(category=category)
     await state.set_state(AddExpenseFlow.payment_method)
-    await message.answer("Payment method? (e.g., card, cash, transfer) or Skip", reply_markup=_skip_cancel_kb())
+    await message.answer("Payment method? Choose below or skip.", reply_markup=_payment_kb())
 
 
 @router.message(AddExpenseFlow.payment_method, F.text)

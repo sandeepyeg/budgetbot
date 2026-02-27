@@ -1,6 +1,7 @@
 from aiogram import Router
-from aiogram.types import Message, BufferedInputFile
+from aiogram.types import Message, BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
+from aiogram import F
 from app.core.charts import bar_chart_by_month, pie_chart_by_category
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
@@ -8,6 +9,67 @@ from io import BytesIO
 from app.services.expense_service import ExpenseService
 
 router = Router(name="reports")
+
+
+def _chart_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="This Month", callback_data="chart:month")],
+            [InlineKeyboardButton(text="This Year", callback_data="chart:year")],
+            [InlineKeyboardButton(text="Year Trend", callback_data="chart:yeartrend")],
+        ]
+    )
+
+
+def _compare_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Month vs Last Month", callback_data="compare:month")],
+            [InlineKeyboardButton(text="Year vs Last Year", callback_data="compare:year")],
+        ]
+    )
+
+
+def _export_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="CSV (This Month)", callback_data="export:csv:month"),
+                InlineKeyboardButton(text="XLSX (This Month)", callback_data="export:xlsx:month"),
+            ],
+            [
+                InlineKeyboardButton(text="CSV (This Year)", callback_data="export:csv:year"),
+                InlineKeyboardButton(text="XLSX (This Year)", callback_data="export:xlsx:year"),
+            ],
+        ]
+    )
+
+
+async def _send_quick_export(target: Message, db: AsyncSession, user_id: int, file_format: str, period: str):
+    now = datetime.now()
+    year = now.year
+    month = now.month if period == "month" else None
+
+    svc = ExpenseService(db)
+    df = await svc.export_expenses(user_id, year=year, month=month)
+    if df is None:
+        await target.answer("No expenses found for the selected period.")
+        return
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    period_label = f"{year}_{month:02d}" if month else f"{year}"
+
+    if file_format == "xlsx":
+        buffer = BytesIO()
+        df.to_excel(buffer, index=False)
+        data = buffer.getvalue()
+        filename = f"expenses_{period_label}_{stamp}.xlsx"
+    else:
+        data = df.to_csv(index=False).encode("utf-8")
+        filename = f"expenses_{period_label}_{stamp}.csv"
+
+    document = BufferedInputFile(data, filename=filename)
+    await target.answer_document(document, caption=f"📦 Export ready: {filename}")
 
 @router.message(Command("month"))
 async def month_report(message: Message, db: AsyncSession):
@@ -291,11 +353,7 @@ async def compare_expenses(message: Message, db: AsyncSession):
         title = f"{y1} vs {y0}"
 
     else:
-        await message.answer("Usage:\n"
-                             "/compare month\n"
-                             "/compare year\n"
-                             "/compare 2025 9 2025 8\n"
-                             "/compare 2025 2024")
+        await message.answer("Pick compare mode:", reply_markup=_compare_kb())
         return
 
     # format result
@@ -312,6 +370,41 @@ async def compare_expenses(message: Message, db: AsyncSession):
         lines.append(f"- {cat}: {arrow} {vals['current']/100:.2f} vs {vals['previous']/100:.2f} {pct}")
 
     await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.callback_query(F.data.in_({"compare:month", "compare:year"}))
+async def compare_quick(callback: CallbackQuery, db: AsyncSession):
+    mode = callback.data.split(":", 1)[1]
+    svc = ExpenseService(db)
+    now = datetime.now()
+
+    if mode == "month":
+        y1, m1 = now.year, now.month
+        prev_year, prev_month = (y1 - 1, 12) if m1 == 1 else (y1, m1 - 1)
+        cur = await svc.totals_for_period(callback.from_user.id, y1, m1)
+        prev = await svc.totals_for_period(callback.from_user.id, prev_year, prev_month)
+        cmp = svc.compare_periods(cur, prev)
+        title = f"{y1}-{m1:02d} vs {prev_year}-{prev_month:02d}"
+    else:
+        y1, y0 = now.year, now.year - 1
+        cur = await svc.totals_for_period(callback.from_user.id, y1)
+        prev = await svc.totals_for_period(callback.from_user.id, y0)
+        cmp = svc.compare_periods(cur, prev)
+        title = f"{y1} vs {y0}"
+
+    lines = [f"📊 *Comparison: {title}*"]
+    total = cmp["total"]
+    arrow = "📈" if total["diff"] > 0 else ("📉" if total["diff"] < 0 else "➡️")
+    pct = f"({total['pct']:.1f}%)" if total["pct"] is not None else ""
+    lines.append(f"💰 Total: {arrow} {total['current']/100:.2f} vs {total['previous']/100:.2f} {pct}")
+    lines.append("\n🏷 *By Category*")
+    for cat, vals in cmp["categories"].items():
+        arrow = "📈" if vals["diff"] > 0 else ("📉" if vals["diff"] < 0 else "➡️")
+        pct = f"({vals['pct']:.1f}%)" if vals["pct"] is not None else ""
+        lines.append(f"- {cat}: {arrow} {vals['current']/100:.2f} vs {vals['previous']/100:.2f} {pct}")
+
+    await callback.message.answer("\n".join(lines), parse_mode="Markdown")
+    await callback.answer()
 
 @router.message(Command("chart"))
 async def chart_expenses(message: Message, db: AsyncSession):
@@ -350,10 +443,41 @@ async def chart_expenses(message: Message, db: AsyncSession):
         await message.answer_photo(buf)
 
     else:
-        await message.answer("Usage:\n"
-                             "/chart month\n"
-                             "/chart year\n"
-                             "/chart yeartrend")
+        await message.answer("Pick chart type:", reply_markup=_chart_kb())
+
+
+@router.callback_query(F.data.in_({"chart:month", "chart:year", "chart:yeartrend"}))
+async def chart_quick(callback: CallbackQuery, db: AsyncSession):
+    mode = callback.data.split(":", 1)[1]
+    now = datetime.now()
+    svc = ExpenseService(db)
+
+    if mode == "month":
+        data = await svc.monthly_summary(callback.from_user.id, now.year, now.month)
+        if data["total_cents"] == 0:
+            await callback.message.answer("No data for this month.")
+            await callback.answer()
+            return
+        buf = pie_chart_by_category(data["breakdown"], f"{now.year}-{now.month:02d} Expenses by Category")
+        await callback.message.answer_photo(buf)
+    elif mode == "year":
+        data = await svc.yearly_summary(callback.from_user.id, now.year)
+        if data["total_cents"] == 0:
+            await callback.message.answer("No data for this year.")
+            await callback.answer()
+            return
+        buf = pie_chart_by_category(data["breakdown"], f"{now.year} Expenses by Category")
+        await callback.message.answer_photo(buf)
+    else:
+        data = await svc.yearly_summary(callback.from_user.id, now.year)
+        if not data["per_month"]:
+            await callback.message.answer("No data for this year.")
+            await callback.answer()
+            return
+        buf = bar_chart_by_month(data["per_month"], f"{now.year} Monthly Spending Trend")
+        await callback.message.answer_photo(buf)
+
+    await callback.answer()
 
 
 @router.message(Command("export"))
@@ -366,6 +490,10 @@ async def export_expenses_cmd(message: Message, db: AsyncSession):
       /export csv 2026 2
     """
     parts = (message.text or "").split()
+    if len(parts) == 1:
+        await message.answer("Pick export format:", reply_markup=_export_kb())
+        return
+
     file_format = "csv"
     year = None
     month = None
@@ -420,3 +548,10 @@ async def export_expenses_cmd(message: Message, db: AsyncSession):
 
     document = BufferedInputFile(data, filename=filename)
     await message.answer_document(document, caption=f"📦 Export ready: {filename}")
+
+
+@router.callback_query(F.data.regexp(r"^export:(csv|xlsx):(month|year)$"))
+async def export_quick(callback: CallbackQuery, db: AsyncSession):
+    _, file_format, period = callback.data.split(":")
+    await _send_quick_export(callback.message, db, callback.from_user.id, file_format, period)
+    await callback.answer()
