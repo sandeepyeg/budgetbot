@@ -45,6 +45,91 @@ def _export_kb() -> InlineKeyboardMarkup:
     )
 
 
+def _report_period_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="This Month", callback_data="report:month:current"),
+                InlineKeyboardButton(text="Last Month", callback_data="report:month:last"),
+            ],
+            [
+                InlineKeyboardButton(text="This Year", callback_data="report:year:current"),
+                InlineKeyboardButton(text="Last Year", callback_data="report:year:last"),
+            ],
+        ]
+    )
+
+
+def _search_chip_kb() -> InlineKeyboardMarkup:
+    chips = [
+        "food", "transport", "shopping", "bills",
+        "health", "entertainment", "coffee", "uber", "rent",
+    ]
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for chip in chips:
+        row.append(InlineKeyboardButton(text=chip.title(), callback_data=f"search:kw:{chip}"))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _send_month_report(target: Message, db: AsyncSession, user_id: int, year: int, month: int):
+    svc = ExpenseService(db)
+    summary = await svc.monthly_summary(user_id=user_id, year=year, month=month)
+    if summary["total_cents"] == 0:
+        await target.answer(f"📊 No expenses found for {year}-{month:02d}.")
+        return
+
+    total_dollars = summary["total_cents"] / 100
+    lines = [f"📅 *{year}-{month:02d}*", f"💰 Total: ${total_dollars:.2f}"]
+    for cat, cents in summary["breakdown"].items():
+        dollars = (cents or 0) / 100
+        lines.append(f" - {cat}: ${dollars:.2f}")
+    await target.answer("\n".join(lines), parse_mode="Markdown")
+
+
+async def _send_year_report(target: Message, db: AsyncSession, user_id: int, year: int):
+    svc = ExpenseService(db)
+    summary = await svc.yearly_summary(user_id=user_id, year=year)
+    if summary["total_cents"] == 0:
+        await target.answer(f"📊 No expenses found for {year}.")
+        return
+
+    total_dollars = summary["total_cents"] / 100
+    lines = [f"📅 *{year}*", f"💰 Total: ${total_dollars:.2f}"]
+    for cat, cents in summary["breakdown"].items():
+        dollars = (cents or 0) / 100
+        lines.append(f" - {cat}: ${dollars:.2f}")
+    if summary["per_month"]:
+        lines.append("\n📆 *By Month*")
+        for m in range(1, 13):
+            if m in summary["per_month"]:
+                dollars = summary["per_month"][m] / 100
+                lines.append(f" - {year}-{m:02d}: ${dollars:.2f}")
+    await target.answer("\n".join(lines), parse_mode="Markdown")
+
+
+async def _send_search_results(target: Message, db: AsyncSession, user_id: int, keyword: str):
+    svc = ExpenseService(db)
+    results = await svc.search_expenses(user_id, keyword)
+    if not results:
+        await target.answer(f"No expenses found for: {keyword}")
+        return
+
+    lines = [f"🔍 Results for *{keyword}* (latest {len(results)})"]
+    for exp in results:
+        dollars = exp.amount_cents / 100
+        cat = f" · 🏷 {exp.category}" if exp.category else ""
+        tags = f" · #{exp.tags.replace(',', ' #')}" if exp.tags else ""
+        note = f"\n    📝 {exp.notes}" if exp.notes else ""
+        lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date}){note}")
+    await target.answer("\n".join(lines), parse_mode="Markdown")
+
+
 async def _send_quick_export(target: Message, db: AsyncSession, user_id: int, file_format: str, period: str):
     now = datetime.now()
     year = now.year
@@ -93,22 +178,9 @@ async def month_report(message: Message, db: AsyncSession):
         await message.answer("Usage: /month [year month]\nExample: /month 2025 9")
         return
 
-    svc = ExpenseService(db)
-    summary = await svc.monthly_summary(user_id=message.from_user.id, year=year, month=month)
-
-    if summary["total_cents"] == 0:
-        await message.answer(f"📊 No expenses found for {year}-{month:02d}.")
-        return
-
-    total_dollars = summary["total_cents"] / 100
-    lines = [f"📅 *{year}-{month:02d}*"]
-    lines.append(f"💰 Total: ${total_dollars:.2f}")
-
-    for cat, cents in summary["breakdown"].items():
-        dollars = (cents or 0) / 100
-        lines.append(f" - {cat}: ${dollars:.2f}")
-
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    await _send_month_report(message, db, message.from_user.id, year, month)
+    if len(parts) == 1:
+        await message.answer("Quick report periods:", reply_markup=_report_period_kb())
 
 
 @router.message(Command("year"))
@@ -132,31 +204,27 @@ async def year_report(message: Message, db: AsyncSession):
         await message.answer("Usage: /year [YYYY]\nExample: /year 2025")
         return
 
-    svc = ExpenseService(db)
-    summary = await svc.yearly_summary(user_id=message.from_user.id, year=year)
+    await _send_year_report(message, db, message.from_user.id, year)
+    if len(parts) == 1:
+        await message.answer("Quick report periods:", reply_markup=_report_period_kb())
 
-    if summary["total_cents"] == 0:
-        await message.answer(f"📊 No expenses found for {year}.")
-        return
 
-    total_dollars = summary["total_cents"] / 100
-    lines = [f"📅 *{year}*"]
-    lines.append(f"💰 Total: ${total_dollars:.2f}")
+@router.callback_query(F.data.regexp(r"^report:(month|year):(current|last)$"))
+async def report_period_quick(callback: CallbackQuery, db: AsyncSession):
+    _, mode, when = callback.data.split(":")
+    now = datetime.now()
 
-    # Category breakdown
-    for cat, cents in summary["breakdown"].items():
-        dollars = (cents or 0) / 100
-        lines.append(f" - {cat}: ${dollars:.2f}")
+    if mode == "month":
+        if when == "current":
+            y, m = now.year, now.month
+        else:
+            y, m = (now.year - 1, 12) if now.month == 1 else (now.year, now.month - 1)
+        await _send_month_report(callback.message, db, callback.from_user.id, y, m)
+    else:
+        y = now.year if when == "current" else now.year - 1
+        await _send_year_report(callback.message, db, callback.from_user.id, y)
 
-    # Per-month subtotals
-    if summary["per_month"]:
-        lines.append("\n📆 *By Month*")
-        for m in range(1, 13):
-            if m in summary["per_month"]:
-                dollars = summary["per_month"][m] / 100
-                lines.append(f" - {year}-{m:02d}: ${dollars:.2f}")
-
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    await callback.answer()
 
 @router.message(Command("monthdetails"))
 async def month_details(message: Message, db: AsyncSession):
@@ -249,27 +317,18 @@ async def search_expenses_cmd(message: Message, db: AsyncSession):
     """
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
-        await message.answer("Usage: /search <keyword>\nExample: /search coffee")
+        await message.answer("Pick a keyword or type: /search <keyword>", reply_markup=_search_chip_kb())
         return
 
     keyword = parts[1].strip()
-    svc = ExpenseService(db)
-    results = await svc.search_expenses(message.from_user.id, keyword)
-
-    if not results:
-        await message.answer(f"No expenses found for: {keyword}")
-        return
-
-    lines = [f"🔍 Results for *{keyword}* (latest {len(results)})"]
-    for exp in results:
-        dollars = exp.amount_cents / 100
-        cat = f" · 🏷 {exp.category}" if exp.category else ""
-        tags = f" · #{exp.tags.replace(',', ' #')}" if exp.tags else ""
-        note = f"\n    📝 {exp.notes}" if exp.notes else ""
-        lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date}){note}")
+    await _send_search_results(message, db, message.from_user.id, keyword)
 
 
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+@router.callback_query(F.data.regexp(r"^search:kw:[a-z0-9_\-]+$"))
+async def search_quick(callback: CallbackQuery, db: AsyncSession):
+    keyword = callback.data.split(":", 2)[2]
+    await _send_search_results(callback.message, db, callback.from_user.id, keyword)
+    await callback.answer()
 
 @router.message(Command("receipt"))
 async def get_receipt(message: Message, db: AsyncSession):
