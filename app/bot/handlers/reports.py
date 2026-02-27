@@ -77,6 +77,36 @@ def _search_chip_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _month_details_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="This Month • Item", callback_data="details:month:item:current"),
+                InlineKeyboardButton(text="This Month • Category", callback_data="details:month:category:current"),
+            ],
+            [
+                InlineKeyboardButton(text="Last Month • Item", callback_data="details:month:item:last"),
+                InlineKeyboardButton(text="Last Month • Category", callback_data="details:month:category:last"),
+            ],
+        ]
+    )
+
+
+def _year_details_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="This Year • Item", callback_data="details:year:item:current"),
+                InlineKeyboardButton(text="This Year • Category", callback_data="details:year:category:current"),
+            ],
+            [
+                InlineKeyboardButton(text="Last Year • Item", callback_data="details:year:item:last"),
+                InlineKeyboardButton(text="Last Year • Category", callback_data="details:year:category:last"),
+            ],
+        ]
+    )
+
+
 async def _send_month_report(target: Message, db: AsyncSession, user_id: int, year: int, month: int):
     svc = ExpenseService(db)
     summary = await svc.monthly_summary(user_id=user_id, year=year, month=month)
@@ -127,6 +157,34 @@ async def _send_search_results(target: Message, db: AsyncSession, user_id: int, 
         tags = f" · #{exp.tags.replace(',', ' #')}" if exp.tags else ""
         note = f"\n    📝 {exp.notes}" if exp.notes else ""
         lines.append(f"- {exp.item_name}: ${dollars:.2f}{cat}{tags} ({exp.local_date}){note}")
+    await target.answer("\n".join(lines), parse_mode="Markdown")
+
+
+async def _send_month_details(target: Message, db: AsyncSession, user_id: int, year: int, month: int, group_by: str):
+    svc = ExpenseService(db)
+    rows = await svc.monthly_details(user_id, year, month, group_by)
+    if not rows:
+        await target.answer(f"No expenses found for {year}-{month:02d}.")
+        return
+
+    lines = [f"📅 *{year}-{month:02d}* — grouped by {group_by}"]
+    for key, cents in rows:
+        dollars = (cents or 0) / 100
+        lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
+    await target.answer("\n".join(lines), parse_mode="Markdown")
+
+
+async def _send_year_details(target: Message, db: AsyncSession, user_id: int, year: int, group_by: str):
+    svc = ExpenseService(db)
+    rows = await svc.yearly_details(user_id, year, group_by)
+    if not rows:
+        await target.answer(f"No expenses found for {year}.")
+        return
+
+    lines = [f"📅 *{year}* — grouped by {group_by}"]
+    for key, cents in rows:
+        dollars = (cents or 0) / 100
+        lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
     await target.answer("\n".join(lines), parse_mode="Markdown")
 
 
@@ -251,20 +309,9 @@ async def month_details(message: Message, db: AsyncSession):
     if group_by not in ["item", "category"]:
         await message.answer("Group by must be 'item' or 'category'")
         return
-
-    svc = ExpenseService(db)
-    rows = await svc.monthly_details(message.from_user.id, year, month, group_by)
-
-    if not rows:
-        await message.answer(f"No expenses found for {year}-{month:02d}.")
-        return
-
-    lines = [f"📅 *{year}-{month:02d}* — grouped by {group_by}"]
-    for key, cents in rows:
-        dollars = (cents or 0) / 100
-        lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
-
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    await _send_month_details(message, db, message.from_user.id, year, month, group_by)
+    if len(parts) == 1:
+        await message.answer("Quick month details:", reply_markup=_month_details_kb())
 
 
 @router.message(Command("yeardetails"))
@@ -292,20 +339,27 @@ async def year_details(message: Message, db: AsyncSession):
     if group_by not in ["item", "category"]:
         await message.answer("Group by must be 'item' or 'category'")
         return
+    await _send_year_details(message, db, message.from_user.id, year, group_by)
+    if len(parts) == 1:
+        await message.answer("Quick year details:", reply_markup=_year_details_kb())
 
-    svc = ExpenseService(db)
-    rows = await svc.yearly_details(message.from_user.id, year, group_by)
 
-    if not rows:
-        await message.answer(f"No expenses found for {year}.")
-        return
+@router.callback_query(F.data.regexp(r"^details:(month|year):(item|category):(current|last)$"))
+async def details_quick(callback: CallbackQuery, db: AsyncSession):
+    _, period, group_by, when = callback.data.split(":")
+    now = datetime.now()
 
-    lines = [f"📅 *{year}* — grouped by {group_by}"]
-    for key, cents in rows:
-        dollars = (cents or 0) / 100
-        lines.append(f" - {key or 'Uncategorized'}: ${dollars:.2f}")
+    if period == "month":
+        if when == "current":
+            y, m = now.year, now.month
+        else:
+            y, m = (now.year - 1, 12) if now.month == 1 else (now.year, now.month - 1)
+        await _send_month_details(callback.message, db, callback.from_user.id, y, m, group_by)
+    else:
+        y = now.year if when == "current" else now.year - 1
+        await _send_year_details(callback.message, db, callback.from_user.id, y, group_by)
 
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    await callback.answer()
 
 
 @router.message(Command("search"))
