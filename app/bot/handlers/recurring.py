@@ -3,6 +3,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.recurring_service import RecurringService
+from app.bot.keyboards import main_menu_kb
 from app.utils.text import short_ref
 
 router = Router(name="recurring")
@@ -15,7 +16,7 @@ async def recurring_help(message: Message):
         "/recurring_cancel <ref> → cancel permanently\n"
         "/recurring_pause <ref> → pause temporarily\n"
         "/recurring_resume <ref> → resume paused"
-    )
+    , reply_markup=main_menu_kb())
 
 
 @router.message(Command("recurring_list"))
@@ -62,7 +63,7 @@ async def recurring_quick_action(callback: CallbackQuery, db: AsyncSession):
         rec = await svc.update_state(ref, callback.from_user.id, paused=True)
         if rec:
             await callback.answer("Paused")
-            await callback.message.answer("⏸ Recurring expense paused.")
+            await callback.message.answer("⏸ Recurring expense paused.", reply_markup=main_menu_kb())
         else:
             await callback.answer("Not found", show_alert=True)
         return
@@ -71,7 +72,7 @@ async def recurring_quick_action(callback: CallbackQuery, db: AsyncSession):
         rec = await svc.update_state(ref, callback.from_user.id, paused=False)
         if rec:
             await callback.answer("Resumed")
-            await callback.message.answer("▶️ Recurring expense resumed.")
+            await callback.message.answer("▶️ Recurring expense resumed.", reply_markup=main_menu_kb())
         else:
             await callback.answer("Not found", show_alert=True)
         return
@@ -79,7 +80,7 @@ async def recurring_quick_action(callback: CallbackQuery, db: AsyncSession):
     rec = await svc.update_state(ref, callback.from_user.id, active=False)
     if rec:
         await callback.answer("Cancelled")
-        await callback.message.answer("❌ Recurring expense cancelled.")
+        await callback.message.answer("❌ Recurring expense cancelled.", reply_markup=main_menu_kb())
     else:
         await callback.answer("Not found", show_alert=True)
 
@@ -92,7 +93,7 @@ async def recurring_cancel(message: Message, db: AsyncSession):
         return
     svc = RecurringService(db)
     rec = await svc.update_state(parts[1], message.from_user.id, active=False)
-    await message.answer("❌ Cancelled." if rec else "Not found.")
+    await message.answer("❌ Cancelled." if rec else "Not found.", reply_markup=main_menu_kb())
 
 
 @router.message(Command("recurring_pause"))
@@ -103,7 +104,7 @@ async def recurring_pause(message: Message, db: AsyncSession):
         return
     svc = RecurringService(db)
     rec = await svc.update_state(parts[1], message.from_user.id, paused=True)
-    await message.answer("⏸ Paused." if rec else "Not found.")
+    await message.answer("⏸ Paused." if rec else "Not found.", reply_markup=main_menu_kb())
 
 
 @router.message(Command("recurring_resume"))
@@ -114,4 +115,4 @@ async def recurring_resume(message: Message, db: AsyncSession):
         return
     svc = RecurringService(db)
     rec = await svc.update_state(parts[1], message.from_user.id, paused=False)
-    await message.answer("▶️ Resumed." if rec else "Not found.")
+    await message.answer("▶️ Resumed." if rec else "Not found.", reply_markup=main_menu_kb())

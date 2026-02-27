@@ -3,9 +3,10 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.rule_service import RuleService
+from app.bot.keyboards import main_menu_kb
 from app.utils.text import short_ref
 
 router = Router(name="rules")
@@ -41,7 +42,7 @@ async def rules_action(message: Message, db: AsyncSession, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     if text == "📋 List Rules":
         await state.clear()
@@ -63,7 +64,7 @@ async def rules_keyword(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     await state.update_data(keyword=text)
     await state.set_state(RuleFlow.category)
@@ -75,7 +76,7 @@ async def rules_category(message: Message, db: AsyncSession, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     data = await state.get_data()
     svc = RuleService(db)
@@ -84,7 +85,7 @@ async def rules_category(message: Message, db: AsyncSession, state: FSMContext):
     await message.answer(
         f"✅ Rule added: {r.keyword} → {r.category} (ref: `{short_ref(r.id)}`)",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_menu_kb(),
     )
 
 
@@ -93,12 +94,12 @@ async def rules_delete_ref(message: Message, db: AsyncSession, state: FSMContext
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     svc = RuleService(db)
     r = await svc.delete_rule(message.from_user.id, text)
     await state.clear()
-    await message.answer("✅ Deleted." if r else "❌ Not found or ambiguous ref.", reply_markup=ReplyKeyboardRemove())
+    await message.answer("✅ Deleted." if r else "❌ Not found or ambiguous ref.", reply_markup=main_menu_kb())
 
 @router.message(Command("rules_list"))
 async def rules_list(message: Message, db: AsyncSession):

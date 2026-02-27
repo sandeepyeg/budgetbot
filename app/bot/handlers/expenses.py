@@ -4,13 +4,14 @@ from aiogram.filters import Command
 from aiogram.filters.state import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from decimal import Decimal, InvalidOperation
 from app.services.budget_service import BudgetService
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.expense_service import ExpenseService
 from app.services.category_service import CategoryService
 from app.services.recurring_service import RecurringService
+from app.bot.keyboards import main_menu_kb
 from app.utils.parser import parse_item_and_amount, extract_hashtags, extract_note, parse_recurring_from_tags
 from app.utils.text import short_ref, normalize_merchant
 
@@ -139,7 +140,7 @@ async def _save_expense(
         )
         msg += "\n📆 Recurring rule created automatically."
 
-    await message.answer(msg, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+    await message.answer(msg, parse_mode="Markdown", reply_markup=main_menu_kb())
 
 def _split_category_and_tags(hashtags: list[str]) -> tuple[str | None, str | None]:
     if not hashtags:
@@ -208,7 +209,7 @@ async def add_flow_item(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     await state.update_data(item=text)
     await state.set_state(AddExpenseFlow.amount)
@@ -220,7 +221,7 @@ async def add_flow_amount(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     try:
         amount = Decimal(text.replace(",", "."))
@@ -238,7 +239,7 @@ async def add_flow_category(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     category = None if text == "⏭ Skip" else text
     await state.update_data(category=category)
@@ -251,7 +252,7 @@ async def add_flow_payment_method(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     payment_method = None if text == "⏭ Skip" else text
     await state.update_data(payment_method=payment_method)
@@ -264,7 +265,7 @@ async def add_flow_tags(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     tags = None if text == "⏭ Skip" else ",".join([t.strip() for t in text.split(",") if t.strip()])
     await state.update_data(tags=tags)
@@ -277,7 +278,7 @@ async def add_flow_note(message: Message, db: AsyncSession, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
 
     note = None if text == "⏭ Skip" else text
@@ -342,7 +343,7 @@ async def edit_last_choose_field(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Edit cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Edit cancelled.", reply_markup=main_menu_kb())
         return
     allowed = {"Item", "Amount", "Category", "Tags", "Note"}
     if text not in allowed:
@@ -366,7 +367,7 @@ async def edit_last_apply(message: Message, db: AsyncSession, state: FSMContext)
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Edit cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Edit cancelled.", reply_markup=main_menu_kb())
         return
 
     data = await state.get_data()
@@ -401,12 +402,12 @@ async def edit_last_apply(message: Message, db: AsyncSession, state: FSMContext)
 
     await state.clear()
     if not updated:
-        await message.answer("Could not update the last expense.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Could not update the last expense.", reply_markup=main_menu_kb())
         return
     await message.answer(
         f"✅ Updated last expense · Ref: `{short_ref(updated.id)}`",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_menu_kb(),
     )
 
 @router.message(StateFilter(None), F.text & ~F.text.startswith("/"))

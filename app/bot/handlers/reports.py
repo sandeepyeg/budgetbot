@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from io import BytesIO
 from app.services.expense_service import ExpenseService
+from app.bot.keyboards import main_menu_kb
 
 router = Router(name="reports")
 
@@ -282,6 +283,7 @@ async def report_period_quick(callback: CallbackQuery, db: AsyncSession):
         y = now.year if when == "current" else now.year - 1
         await _send_year_report(callback.message, db, callback.from_user.id, y)
 
+    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
     await callback.answer()
 
 @router.message(Command("monthdetails"))
@@ -359,6 +361,7 @@ async def details_quick(callback: CallbackQuery, db: AsyncSession):
         y = now.year if when == "current" else now.year - 1
         await _send_year_details(callback.message, db, callback.from_user.id, y, group_by)
 
+    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
     await callback.answer()
 
 
@@ -382,6 +385,7 @@ async def search_expenses_cmd(message: Message, db: AsyncSession):
 async def search_quick(callback: CallbackQuery, db: AsyncSession):
     keyword = callback.data.split(":", 2)[2]
     await _send_search_results(callback.message, db, callback.from_user.id, keyword)
+    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
     await callback.answer()
 
 @router.message(Command("receipt"))
@@ -516,7 +520,7 @@ async def compare_quick(callback: CallbackQuery, db: AsyncSession):
         pct = f"({vals['pct']:.1f}%)" if vals["pct"] is not None else ""
         lines.append(f"- {cat}: {arrow} {vals['current']/100:.2f} vs {vals['previous']/100:.2f} {pct}")
 
-    await callback.message.answer("\n".join(lines), parse_mode="Markdown")
+    await callback.message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=main_menu_kb())
     await callback.answer()
 
 @router.message(Command("chart"))
@@ -572,7 +576,7 @@ async def chart_quick(callback: CallbackQuery, db: AsyncSession):
             await callback.answer()
             return
         buf = pie_chart_by_category(data["breakdown"], f"{now.year}-{now.month:02d} Expenses by Category")
-        await callback.message.answer_photo(buf)
+        await callback.message.answer_photo(buf, reply_markup=main_menu_kb())
     elif mode == "year":
         data = await svc.yearly_summary(callback.from_user.id, now.year)
         if data["total_cents"] == 0:
@@ -580,7 +584,7 @@ async def chart_quick(callback: CallbackQuery, db: AsyncSession):
             await callback.answer()
             return
         buf = pie_chart_by_category(data["breakdown"], f"{now.year} Expenses by Category")
-        await callback.message.answer_photo(buf)
+        await callback.message.answer_photo(buf, reply_markup=main_menu_kb())
     else:
         data = await svc.yearly_summary(callback.from_user.id, now.year)
         if not data["per_month"]:
@@ -588,7 +592,7 @@ async def chart_quick(callback: CallbackQuery, db: AsyncSession):
             await callback.answer()
             return
         buf = bar_chart_by_month(data["per_month"], f"{now.year} Monthly Spending Trend")
-        await callback.message.answer_photo(buf)
+        await callback.message.answer_photo(buf, reply_markup=main_menu_kb())
 
     await callback.answer()
 
@@ -667,4 +671,5 @@ async def export_expenses_cmd(message: Message, db: AsyncSession):
 async def export_quick(callback: CallbackQuery, db: AsyncSession):
     _, file_format, period = callback.data.split(":")
     await _send_quick_export(callback.message, db, callback.from_user.id, file_format, period)
+    await callback.message.answer("📋 Main menu ready.", reply_markup=main_menu_kb())
     await callback.answer()

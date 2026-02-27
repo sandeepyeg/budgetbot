@@ -3,11 +3,12 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from app.services.budget_service import BudgetService
 from app.services.expense_service import ExpenseService
+from app.bot.keyboards import main_menu_kb
 from app.utils.text import short_ref, progress_bar
 
 router = Router(name="budgets")
@@ -66,7 +67,7 @@ async def budget_action(message: Message, db: AsyncSession, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     if text == "📋 List Budgets":
         await state.clear()
@@ -88,7 +89,7 @@ async def budget_scope(message: Message, state: FSMContext):
     text = (message.text or "").strip().lower()
     if text == "❌ cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     if text == "overall":
         await state.update_data(scope_type="overall", scope_value=None)
@@ -107,7 +108,7 @@ async def budget_category(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     await state.update_data(scope_type="category", scope_value=text)
     await state.set_state(BudgetFlow.limit)
@@ -119,7 +120,7 @@ async def budget_limit(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     try:
         limit_cents = int(float(text) * 100)
@@ -136,7 +137,7 @@ async def budget_period(message: Message, db: AsyncSession, state: FSMContext):
     text = (message.text or "").strip().lower()
     if text == "❌ cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     if text not in ("month", "month_rollover", "year"):
         await message.answer("Choose 'month', 'month_rollover', or 'year'.")
@@ -157,7 +158,7 @@ async def budget_period(message: Message, db: AsyncSession, state: FSMContext):
     await message.answer(
         f"✅ Budget set: {scope_disp} ${data['limit_cents']/100:.2f}/{text} · Ref: `{short_ref(b.id)}`",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_menu_kb(),
     )
 
 
@@ -166,12 +167,12 @@ async def budget_delete_ref(message: Message, db: AsyncSession, state: FSMContex
     text = (message.text or "").strip()
     if text == "❌ Cancel":
         await state.clear()
-        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Cancelled.", reply_markup=main_menu_kb())
         return
     svc = BudgetService(db)
     b = await svc.delete_budget(text, message.from_user.id)
     await state.clear()
-    await message.answer("✅ Deleted." if b else "❌ Not found or ambiguous ref.", reply_markup=ReplyKeyboardRemove())
+    await message.answer("✅ Deleted." if b else "❌ Not found or ambiguous ref.", reply_markup=main_menu_kb())
 
 @router.message(Command("budget_list"))
 async def budget_list(message: Message, db: AsyncSession):

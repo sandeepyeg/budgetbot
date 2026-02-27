@@ -1,24 +1,9 @@
 from aiogram import Router
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message
+from app.bot.keyboards import main_menu_kb
 
 router = Router(name="start")
-
-
-def _main_menu_kb() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="/add"), KeyboardButton(text="/split")],
-            [KeyboardButton(text="/month"), KeyboardButton(text="/year")],
-            [KeyboardButton(text="/monthdetails"), KeyboardButton(text="/yeardetails")],
-            [KeyboardButton(text="/chart"), KeyboardButton(text="/compare")],
-            [KeyboardButton(text="/budget"), KeyboardButton(text="/rules")],
-            [KeyboardButton(text="/recurring"), KeyboardButton(text="/export")],
-            [KeyboardButton(text="/undo"), KeyboardButton(text="/edit_last")],
-            [KeyboardButton(text="/search"), KeyboardButton(text="/menu")],
-        ],
-        resize_keyboard=True,
-    )
 
 
 @router.message(CommandStart())
@@ -32,7 +17,7 @@ async def start_cmd(message: Message):
         "• /budget\n"
         "• /rules\n\n"
         "Use the menu keyboard below for mostly no-typing usage.",
-        reply_markup=_main_menu_kb(),
+        reply_markup=main_menu_kb(),
     )
 
 
@@ -50,10 +35,10 @@ async def help_cmd(message: Message):
         "• /undo — remove last expense\n"
         "• /edit_last — edit last expense\n"
         "• /export [csv|xlsx] [year] [month]\n",
-        reply_markup=_main_menu_kb(),
+        reply_markup=main_menu_kb(),
     )
 
 
 @router.message(Command("menu"))
 async def menu_cmd(message: Message):
-    await message.answer("📋 Main menu is ready. Tap any command below.", reply_markup=_main_menu_kb())
+    await message.answer("📋 Main menu is ready. Tap any command below.", reply_markup=main_menu_kb())
