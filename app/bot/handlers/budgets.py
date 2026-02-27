@@ -5,9 +5,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 from app.services.budget_service import BudgetService
 from app.services.expense_service import ExpenseService
-from app.utils.text import short_ref
+from app.utils.text import short_ref, progress_bar
 
 router = Router(name="budgets")
 
@@ -44,7 +45,8 @@ def _budget_scope_kb() -> ReplyKeyboardMarkup:
 def _budget_period_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="month"), KeyboardButton(text="year")],
+            [KeyboardButton(text="month"), KeyboardButton(text="month_rollover")],
+            [KeyboardButton(text="year")],
             [KeyboardButton(text="❌ Cancel")],
         ],
         resize_keyboard=True,
@@ -136,8 +138,8 @@ async def budget_period(message: Message, db: AsyncSession, state: FSMContext):
         await state.clear()
         await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
         return
-    if text not in ("month", "year"):
-        await message.answer("Choose 'month' or 'year'.")
+    if text not in ("month", "month_rollover", "year"):
+        await message.answer("Choose 'month', 'month_rollover', or 'year'.")
         return
 
     data = await state.get_data()
@@ -174,6 +176,8 @@ async def budget_delete_ref(message: Message, db: AsyncSession, state: FSMContex
 @router.message(Command("budget_list"))
 async def budget_list(message: Message, db: AsyncSession):
     svc = BudgetService(db)
+    es = ExpenseService(db)
+    now = datetime.now()
     budgets = await svc.list_budgets(message.from_user.id)
     if not budgets:
         await message.answer("No budgets set.")
@@ -181,7 +185,11 @@ async def budget_list(message: Message, db: AsyncSession):
     lines = ["📊 Active budgets:"]
     for b in budgets:
         scope = b.scope_value if b.scope_type == "category" else "Overall"
-        lines.append(f"- {scope}: ${b.limit_cents/100:.2f} per {b.period} (ref: {short_ref(b.id)})")
+        progress = await svc.get_budget_progress(message.from_user.id, b, es, now.year, now.month)
+        bar = progress_bar(progress["pct"])
+        lines.append(
+            f"- {scope}: ${progress['spent_cents']/100:.2f}/${progress['effective_limit_cents']/100:.2f} [{bar}] {progress['pct']:.0f}% per {b.period} (ref: {short_ref(b.id)})"
+        )
     await message.answer("\n".join(lines))
 
 @router.message(Command("budget_add"))
@@ -203,8 +211,8 @@ async def budget_add(message: Message, db: AsyncSession):
     else:
         await message.answer("Scope must be 'overall' or 'category:<name>'")
         return
-    if period.lower() not in ("month", "year"):
-        await message.answer("Period must be month or year.")
+    if period.lower() not in ("month", "month_rollover", "year"):
+        await message.answer("Period must be month, month_rollover, or year.")
         return
 
     svc = BudgetService(db)

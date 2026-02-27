@@ -76,17 +76,37 @@ class BudgetService:
 
         budgets = await self.list_budgets(user_id)
         for b in budgets:
-            if b.period == "month":
-                totals = await expense_service.monthly_summary(user_id, year, month)
-                total = totals["total_cents"] if b.scope_type == "overall" else totals["breakdown"].get(b.scope_value, 0)
-            else:  # yearly
-                totals = await expense_service.yearly_summary(user_id, year)
-                total = totals["total_cents"] if b.scope_type == "overall" else totals["breakdown"].get(b.scope_value, 0)
-
-            pct = (total / b.limit_cents * 100) if b.limit_cents > 0 else None
+            progress = await self.get_budget_progress(user_id, b, expense_service, year, month)
+            total = progress["spent_cents"]
+            effective_limit = progress["effective_limit_cents"]
+            pct = (total / effective_limit * 100) if effective_limit > 0 else None
             if pct and 80 <= pct < 100:
-                alerts.append(f"⚠️ {b.scope_value or 'Overall'} budget at {pct:.0f}% (${total/100:.2f}/${b.limit_cents/100:.2f})")
+                alerts.append(f"⚠️ {b.scope_value or 'Overall'} budget at {pct:.0f}% (${total/100:.2f}/${effective_limit/100:.2f})")
             elif pct and pct >= 100:
-                alerts.append(f"🚨 {b.scope_value or 'Overall'} budget exceeded! (${total/100:.2f}/${b.limit_cents/100:.2f})")
+                alerts.append(f"🚨 {b.scope_value or 'Overall'} budget exceeded! (${total/100:.2f}/${effective_limit/100:.2f})")
 
         return alerts
+
+    async def get_budget_progress(self, user_id: int, budget: Budget, expense_service: ExpenseService, year: int, month: int):
+        if budget.period in ("month", "month_rollover"):
+            totals = await expense_service.monthly_summary(user_id, year, month)
+            spent = totals["total_cents"] if budget.scope_type == "overall" else (totals["breakdown"].get(budget.scope_value, 0) or 0)
+            effective_limit = budget.limit_cents
+
+            if budget.period == "month_rollover":
+                prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+                prev_totals = await expense_service.monthly_summary(user_id, prev_year, prev_month)
+                prev_spent = prev_totals["total_cents"] if budget.scope_type == "overall" else (prev_totals["breakdown"].get(budget.scope_value, 0) or 0)
+                carry = max(0, budget.limit_cents - prev_spent)
+                effective_limit += carry
+        else:
+            totals = await expense_service.yearly_summary(user_id, year)
+            spent = totals["total_cents"] if budget.scope_type == "overall" else (totals["breakdown"].get(budget.scope_value, 0) or 0)
+            effective_limit = budget.limit_cents
+
+        pct = (spent / effective_limit * 100) if effective_limit > 0 else 0.0
+        return {
+            "spent_cents": spent,
+            "effective_limit_cents": effective_limit,
+            "pct": pct,
+        }

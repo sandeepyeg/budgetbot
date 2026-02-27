@@ -3,6 +3,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.recurring_service import RecurringService
+from app.utils.text import short_ref
 
 router = Router(name="recurring")
 
@@ -11,9 +12,9 @@ async def recurring_help(message: Message):
     await message.answer(
         "Recurring expense commands:\n"
         "/recurring_list → list active recurring\n"
-        "/recurring_cancel <id> → cancel permanently\n"
-        "/recurring_pause <id> → pause temporarily\n"
-        "/recurring_resume <id> → resume paused"
+        "/recurring_cancel <ref> → cancel permanently\n"
+        "/recurring_pause <ref> → pause temporarily\n"
+        "/recurring_resume <ref> → resume paused"
     )
 
 
@@ -37,7 +38,7 @@ async def recurring_list(message: Message, db: AsyncSession):
         repeat = f" ×{r.remaining}" if r.remaining else (" ∞" if r.repeat_count is None else "")
         lines.append(
             f"- {r.item_name} ${r.amount_cents/100:.2f} "
-            f"[{status}] — {freq}{repeat} (id: {r.id})"
+            f"[{status}] — {freq}{repeat} (ref: {short_ref(r.id)})"
         )
 
     await message.answer("\n".join(lines))
@@ -47,7 +48,7 @@ async def recurring_list(message: Message, db: AsyncSession):
 async def recurring_cancel(message: Message, db: AsyncSession):
     parts = message.text.split()
     if len(parts) != 2:
-        await message.answer("Usage: /recurring_cancel <id>")
+        await message.answer("Usage: /recurring_cancel <ref>")
         return
     svc = RecurringService(db)
     rec = await svc.update_state(parts[1], message.from_user.id, active=False)
@@ -58,7 +59,7 @@ async def recurring_cancel(message: Message, db: AsyncSession):
 async def recurring_pause(message: Message, db: AsyncSession):
     parts = message.text.split()
     if len(parts) != 2:
-        await message.answer("Usage: /recurring_pause <id>")
+        await message.answer("Usage: /recurring_pause <ref>")
         return
     svc = RecurringService(db)
     rec = await svc.update_state(parts[1], message.from_user.id, paused=True)
@@ -69,7 +70,7 @@ async def recurring_pause(message: Message, db: AsyncSession):
 async def recurring_resume(message: Message, db: AsyncSession):
     parts = message.text.split()
     if len(parts) != 2:
-        await message.answer("Usage: /recurring_resume <id>")
+        await message.answer("Usage: /recurring_resume <ref>")
         return
     svc = RecurringService(db)
     rec = await svc.update_state(parts[1], message.from_user.id, paused=False)

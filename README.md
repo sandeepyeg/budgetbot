@@ -7,8 +7,13 @@ BudgetBot is a **Telegram-based personal finance management bot** that helps use
 ## Features
 
 - **Expense Tracking**: Log expenses with categories, tags, and notes.
+- **Guided Flows**: Guided keyboard flows for Add, Budget, and Rules setup.
 - **Budget Management**: Set budgets and receive alerts when limits are exceeded.
+- **Budget Progress + Rollover**: Visual progress bars and optional monthly rollover budgets.
 - **Recurring Expenses**: Automate tracking of subscriptions, rent, and other recurring payments.
+- **Weekly Digest**: Automatic weekly spending digest with budget alerts.
+- **Split Expenses**: Split one purchase across categories with `/split`.
+- **Edit Safety**: Undo the last expense or edit the last expense quickly.
 - **Reports & Charts**: Generate monthly/yearly summaries and visualize spending habits.
 - **Forecasting**: Predict future expenses based on historical data.
 - **Receipt Management**: Upload and process receipts for expense logging.
@@ -128,6 +133,34 @@ BudgetBot is a **Telegram-based personal finance management bot** that helps use
   ```
   /month
   ```
+
+  - **Guided Onboarding & Quick Actions**:
+    ```
+    /start
+    ```
+
+  - **Split Expense**:
+    ```
+    /split Dinner Food:20,Transport:10 pm:card
+    ```
+
+  - **Undo / Edit Last**:
+    ```
+    /undo
+    /edit_last
+    ```
+
+  - **Budget Rollover**:
+    ```
+    /budget_add category:Food 500 month_rollover
+    ```
+
+  - **Export as Document (Telegram file)**:
+    ```
+    /export csv 2026 2
+    /export xlsx 2026
+    ```
+
   Response:
   ```
   Total Expenses: $450.00

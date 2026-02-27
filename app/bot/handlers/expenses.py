@@ -12,7 +12,7 @@ from app.services.expense_service import ExpenseService
 from app.services.category_service import CategoryService
 from app.services.recurring_service import RecurringService
 from app.utils.parser import parse_item_and_amount, extract_hashtags, extract_note, parse_recurring_from_tags
-from app.utils.text import short_ref
+from app.utils.text import short_ref, normalize_merchant
 
 router = Router(name="expenses")
 
@@ -21,6 +21,7 @@ class AddExpenseFlow(StatesGroup):
     item = State()
     amount = State()
     category = State()
+    payment_method = State()
     tags = State()
     note = State()
 
@@ -64,7 +65,14 @@ async def _save_expense(
     tags_csv: str | None,
     note: str | None,
     hashtags_for_recurring: list[str],
+    payment_method: str | None = None,
 ):
+    merchant = normalize_merchant(item)
+    normalized_note = note.strip() if note else ""
+    if payment_method:
+        normalized_note = (normalized_note + " | " if normalized_note else "") + f"pm:{payment_method.strip()}"
+    normalized_note = (normalized_note + " | " if normalized_note else "") + f"merchant:{merchant}"
+
     svc = ExpenseService(db)
     exp = await svc.add_expense_text(
         user_id=message.from_user.id,
@@ -72,7 +80,7 @@ async def _save_expense(
         amount_cents=cents,
         category=category_name,
         tags=tags_csv,
-        notes=note,
+        notes=normalized_note,
     )
 
     bsvc = BudgetService(db)
@@ -86,6 +94,9 @@ async def _save_expense(
         msg += f" · 🏷 {category_name}"
     if tags_csv:
         msg += f" · #{tags_csv.replace(',', ' #')}"
+    if payment_method:
+        msg += f" · 💳 {payment_method}"
+    msg += f" · 🏪 {merchant}"
 
     rec_cfg = parse_recurring_from_tags(hashtags_for_recurring)
     if rec_cfg:
@@ -115,6 +126,21 @@ def _split_category_and_tags(hashtags: list[str]) -> tuple[str | None, str | Non
     tags_csv = ",".join(others) if others else None
     return cat, tags_csv
 
+
+def _extract_payment_method(hashtags: list[str]) -> tuple[str | None, list[str]]:
+    cleaned: list[str] = []
+    payment = None
+    for h in hashtags:
+        h_low = h.lower()
+        if h_low.startswith("pm_"):
+            payment = h.split("_", 1)[1]
+            continue
+        if h_low.startswith("pay_"):
+            payment = h.split("_", 1)[1]
+            continue
+        cleaned.append(h)
+    return payment, cleaned
+
 @router.message(Command("add"))
 async def add_cmd(message: Message, db: AsyncSession, state: FSMContext):
     text = message.text or ""
@@ -134,6 +160,7 @@ async def add_cmd(message: Message, db: AsyncSession, state: FSMContext):
 
     item, cents = parsed
     hashtags = extract_hashtags(payload)
+    payment_method, hashtags = _extract_payment_method(hashtags)
     note = extract_note(payload)
     cat_token, tags_csv = _split_category_and_tags(hashtags)
 
@@ -150,7 +177,7 @@ async def add_cmd(message: Message, db: AsyncSession, state: FSMContext):
             cs = CategoryService(db)
             cat = await cs.get_or_create(suggested)
             category_name = cat.name
-    await _save_expense(message, db, item, cents, category_name, tags_csv, note, hashtags)
+    await _save_expense(message, db, item, cents, category_name, tags_csv, note, hashtags, payment_method)
 
 
 @router.message(AddExpenseFlow.item, F.text)
@@ -192,6 +219,19 @@ async def add_flow_category(message: Message, state: FSMContext):
         return
     category = None if text == "⏭ Skip" else text
     await state.update_data(category=category)
+    await state.set_state(AddExpenseFlow.payment_method)
+    await message.answer("Payment method? (e.g., card, cash, transfer) or Skip", reply_markup=_skip_cancel_kb())
+
+
+@router.message(AddExpenseFlow.payment_method, F.text)
+async def add_flow_payment_method(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if text == "❌ Cancel":
+        await state.clear()
+        await message.answer("Cancelled.", reply_markup=ReplyKeyboardRemove())
+        return
+    payment_method = None if text == "⏭ Skip" else text
+    await state.update_data(payment_method=payment_method)
     await state.set_state(AddExpenseFlow.tags)
     await message.answer("Tags? comma-separated (or Skip)", reply_markup=_skip_cancel_kb())
 
@@ -236,6 +276,7 @@ async def add_flow_note(message: Message, db: AsyncSession, state: FSMContext):
         data.get("tags"),
         note,
         [],
+        data.get("payment_method"),
     )
 
 
@@ -356,6 +397,7 @@ async def add_free_text(message: Message, db: AsyncSession):
 
     item, cents = parsed
     hashtags = extract_hashtags(message.text or "")
+    payment_method, hashtags = _extract_payment_method(hashtags)
     note = extract_note(message.text or "")
     cat_token, tags_csv = _split_category_and_tags(hashtags)
 
@@ -373,16 +415,78 @@ async def add_free_text(message: Message, db: AsyncSession):
             cat = await cs.get_or_create(suggested)
             category_name = cat.name
 
-    await _save_expense(message, db, item, cents, category_name, tags_csv, note, hashtags)
+    await _save_expense(message, db, item, cents, category_name, tags_csv, note, hashtags, payment_method)
+
+
+@router.message(Command("split"))
+async def split_expense(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /split Dinner Food:20,Transport:10 [pm:card]
+    """
+    payload = (message.text or "").partition(" ")[2].strip()
+    if not payload:
+        await message.answer("Usage: /split <item> <Category:Amount,Category:Amount> [pm:<method>]")
+        return
+
+    payment_method = None
+    if " pm:" in payload:
+        payload, payment_method = payload.rsplit(" pm:", 1)
+        payment_method = payment_method.strip()
+
+    parts = payload.split(maxsplit=1)
+    if len(parts) != 2:
+        await message.answer("Usage: /split <item> <Category:Amount,Category:Amount> [pm:<method>]")
+        return
+
+    item, split_blob = parts
+    entries = [x.strip() for x in split_blob.split(",") if x.strip()]
+    if not entries:
+        await message.answer("No split entries found.")
+        return
+
+    cs = CategoryService(db)
+    created_refs = []
+    for entry in entries:
+        if ":" not in entry:
+            await message.answer(f"Invalid split entry: {entry}")
+            return
+        cat_name, amount_text = entry.split(":", 1)
+        try:
+            cents = int((Decimal(amount_text.strip().replace(",", ".")) * 100).quantize(Decimal("1")))
+        except (InvalidOperation, ValueError):
+            await message.answer(f"Invalid amount in entry: {entry}")
+            return
+
+        cat = await cs.get_or_create(cat_name.strip())
+        merchant = normalize_merchant(item)
+        note = f"split:{item} | merchant:{merchant}"
+        if payment_method:
+            note += f" | pm:{payment_method}"
+
+        svc = ExpenseService(db)
+        exp = await svc.add_expense_text(
+            user_id=message.from_user.id,
+            item_name=item,
+            amount_cents=cents,
+            category=cat.name,
+            tags="split",
+            notes=note,
+        )
+        created_refs.append(short_ref(exp.id))
+
+    await message.answer(
+        f"✅ Split expense created ({len(created_refs)} entries). Refs: {', '.join(created_refs)}",
+    )
 
 @router.message(Command("settags"))
 async def set_tags(message: Message, db: AsyncSession):
     """
-    Usage: /settags <expense_id> tag1,tag2,tag3
+    Usage: /settags <ref> tag1,tag2,tag3
     """
     parts = (message.text or "").split(maxsplit=2)
     if len(parts) < 3:
-        await message.answer("Usage: /settags <expense_id> <tag1,tag2,...>")
+        await message.answer("Usage: /settags <ref> <tag1,tag2,...>")
         return
 
     _, expense_id, tags = parts
@@ -398,11 +502,11 @@ async def set_tags(message: Message, db: AsyncSession):
 @router.message(Command("setnote"))
 async def set_note(message: Message, db: AsyncSession):
     """
-    Usage: /setnote <expense_id> some note text
+    Usage: /setnote <ref> some note text
     """
     parts = (message.text or "").split(maxsplit=2)
     if len(parts) < 3:
-        await message.answer("Usage: /setnote <expense_id> <note text>")
+        await message.answer("Usage: /setnote <ref> <note text>")
         return
 
     _, expense_id, note = parts
