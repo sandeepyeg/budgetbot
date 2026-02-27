@@ -92,3 +92,47 @@ async def test_budget_rollover_progress(db_session: AsyncSession):
 
     assert progress["effective_limit_cents"] == 15000
     assert progress["spent_cents"] == 2000
+
+
+@pytest.mark.asyncio
+async def test_budget_alerts_threshold_and_exceeded(db_session: AsyncSession):
+    user_id = 1
+    db_session.add(
+        Expense(
+            user_id=user_id,
+            item_name="Food Spend",
+            amount_cents=9000,
+            currency="CAD",
+            category="Food",
+            tags=None,
+            notes=None,
+            receipt_path=None,
+            local_date=date(2026, 2, 20),
+            recurring_id=None,
+        )
+    )
+    db_session.add(
+        Expense(
+            user_id=user_id,
+            item_name="Rent",
+            amount_cents=110000,
+            currency="CAD",
+            category="Bills",
+            tags=None,
+            notes=None,
+            receipt_path=None,
+            local_date=date(2026, 2, 1),
+            recurring_id=None,
+        )
+    )
+    await db_session.commit()
+
+    bsvc = BudgetService(db_session)
+    await bsvc.add_budget(user_id=user_id, scope_type="category", scope_value="Food", limit_cents=10000, period="month")
+    await bsvc.add_budget(user_id=user_id, scope_type="overall", scope_value=None, limit_cents=100000, period="month")
+
+    esvc = ExpenseService(db_session)
+    alerts = await bsvc.check_alerts(user_id, esvc)
+
+    assert any("Food budget at" in a for a in alerts)
+    assert any("Overall budget exceeded" in a for a in alerts)
