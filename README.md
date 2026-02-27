@@ -86,7 +86,7 @@ BudgetBot is a **Telegram-based personal finance management bot** that helps use
    - Add the following variables:
      ```env
      TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-     DATABASE_URL=sqlite:///data/budgetbot.db
+    DATABASE_URL=sqlite+aiosqlite:///./data/expensebot.db
      ```
 
 5. **Initialize the database**:
@@ -105,7 +105,7 @@ BudgetBot is a **Telegram-based personal finance management bot** that helps use
 
 - **Environment Variables**:
   - `TELEGRAM_BOT_TOKEN`: Token for the Telegram bot.
-  - `DATABASE_URL`: Database connection string (e.g., `sqlite:///data/budgetbot.db` or `postgresql://user:password@localhost/dbname`).
+  - `DATABASE_URL`: Database connection string (e.g., `sqlite+aiosqlite:///./data/expensebot.db` or `postgresql+asyncpg://user:password@localhost/dbname`).
 - **Environment-Specific Notes**:
   - Use SQLite for development and PostgreSQL for production.
   - Update `DATABASE_URL` accordingly in the `.env` file.

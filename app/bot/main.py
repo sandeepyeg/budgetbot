@@ -14,6 +14,7 @@ from app.bot.handlers.budgets import router as budgets_router
 from app.bot.handlers.rules import router as rules_router
 from app.bot.handlers.nlp import router as nlp_router
 from app.bot.handlers.forecast import router as forecast_router
+from app.bot.handlers.recurring import router as recurring_router
 
 
 logger = setup_logging()
@@ -33,7 +34,6 @@ async def on_startup(bot: Bot):
         BotCommand(command="monthdetails", description="Month details by item/category"),
         BotCommand(command="yeardetails", description="Year details by item/category"),
         BotCommand(command="search", description="Search expenses"),
-        BotCommand(command="receipt", description="Get receipt by expense_id"),
         BotCommand(command="receipt", description="Get receipt by expense_id"),
         BotCommand(command="export", description="Export expenses as CSV/Excel"),
         BotCommand(command="recurring", description="Recurring help"),
@@ -72,6 +72,7 @@ async def main():
     dp.include_router(nlp_router)
     dp.include_router(rules_router)
     dp.include_router(forecast_router)
+    dp.include_router(recurring_router)
 
 
     await on_startup(bot)

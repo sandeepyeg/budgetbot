@@ -10,14 +10,14 @@ router = Router(name="budgets")
 @router.message(Command("budget"))
 async def budget_help(message: Message):
     await message.answer("Usage:\n"
-                         "/budget add <scope> <limit> <period>\n"
+                         "/budget_add <scope> <limit> <period>\n"
                          "  scope = overall OR category:<name>\n"
                          "  limit = number in dollars\n"
                          "  period = month|year\n"
-                         "Example: /budget add overall 2000 month\n"
-                         "Example: /budget add category:Food 500 month\n"
-                         "/budget list\n"
-                         "/budget delete <id>")
+                         "Example: /budget_add overall 2000 month\n"
+                         "Example: /budget_add category:Food 500 month\n"
+                         "/budget_list\n"
+                         "/budget_delete <id>")
 
 @router.message(Command("budget_list"))
 async def budget_list(message: Message, db: AsyncSession):
@@ -35,10 +35,10 @@ async def budget_list(message: Message, db: AsyncSession):
 @router.message(Command("budget_add"))
 async def budget_add(message: Message, db: AsyncSession):
     parts = message.text.split()
-    if len(parts) != 5:
-        await message.answer("Usage: /budget add <scope> <limit> <period>")
+    if len(parts) != 4:
+        await message.answer("Usage: /budget_add <scope> <limit> <period>")
         return
-    _, _, scope, limit_str, period = parts
+    _, scope, limit_str, period = parts
     try:
         limit_cents = int(float(limit_str) * 100)
     except ValueError:
@@ -64,7 +64,7 @@ async def budget_add(message: Message, db: AsyncSession):
 async def budget_delete(message: Message, db: AsyncSession):
     parts = message.text.split()
     if len(parts) != 2:
-        await message.answer("Usage: /budget delete <id>")
+        await message.answer("Usage: /budget_delete <id>")
         return
     svc = BudgetService(db)
     b = await svc.delete_budget(parts[1], message.from_user.id)

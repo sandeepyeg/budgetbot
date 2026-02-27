@@ -1,9 +1,10 @@
 from aiogram import Router
-from aiogram.types import Message
+from aiogram.types import Message, BufferedInputFile
 from aiogram.filters import Command
 from app.core.charts import bar_chart_by_month, pie_chart_by_category
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
+from io import BytesIO
 from app.services.expense_service import ExpenseService
 
 router = Router(name="reports")
@@ -353,3 +354,69 @@ async def chart_expenses(message: Message, db: AsyncSession):
                              "/chart month\n"
                              "/chart year\n"
                              "/chart yeartrend")
+
+
+@router.message(Command("export"))
+async def export_expenses_cmd(message: Message, db: AsyncSession):
+    """
+    Usage:
+      /export
+      /export csv
+      /export xlsx 2026
+      /export csv 2026 2
+    """
+    parts = (message.text or "").split()
+    file_format = "csv"
+    year = None
+    month = None
+
+    if len(parts) >= 2:
+        maybe_format = parts[1].lower()
+        if maybe_format in {"csv", "xlsx"}:
+            file_format = maybe_format
+            args = parts[2:]
+        else:
+            args = parts[1:]
+    else:
+        args = []
+
+    if len(args) >= 1:
+        try:
+            year = int(args[0])
+        except ValueError:
+            await message.answer("Usage: /export [csv|xlsx] [year] [month]")
+            return
+
+    if len(args) >= 2:
+        try:
+            month = int(args[1])
+            if month < 1 or month > 12:
+                raise ValueError
+        except ValueError:
+            await message.answer("Month must be between 1 and 12.")
+            return
+
+    if len(args) > 2:
+        await message.answer("Usage: /export [csv|xlsx] [year] [month]")
+        return
+
+    svc = ExpenseService(db)
+    df = await svc.export_expenses(message.from_user.id, year=year, month=month)
+    if df is None:
+        await message.answer("No expenses found for the selected period.")
+        return
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    period_label = "all" if not year else (f"{year}" if not month else f"{year}_{month:02d}")
+
+    if file_format == "xlsx":
+        buffer = BytesIO()
+        df.to_excel(buffer, index=False)
+        data = buffer.getvalue()
+        filename = f"expenses_{period_label}_{stamp}.xlsx"
+    else:
+        data = df.to_csv(index=False).encode("utf-8")
+        filename = f"expenses_{period_label}_{stamp}.csv"
+
+    document = BufferedInputFile(data, filename=filename)
+    await message.answer_document(document, caption=f"📦 Export ready: {filename}")

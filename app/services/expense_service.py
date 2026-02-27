@@ -58,8 +58,8 @@ class ExpenseService:
             )
             .where(
                 Expense.user_id == user_id,
-                func.strftime("%Y", Expense.local_date) == str(year),
-                func.strftime("%m", Expense.local_date) == f"{month:02d}",
+                extract("year", Expense.local_date) == year,
+                extract("month", Expense.local_date) == month,
             )
             .group_by(Expense.category)
         )

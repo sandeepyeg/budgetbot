@@ -27,11 +27,11 @@ async def rules_list(message: Message, db: AsyncSession):
 
 @router.message(Command("rules_add"))
 async def rules_add(message: Message, db: AsyncSession):
-    parts = message.text.split(maxsplit=3)
+    parts = message.text.split(maxsplit=2)
     if len(parts) < 3:
         await message.answer("Usage: /rules_add <keyword> <category>")
         return
-    _, _, keyword, category = parts
+    _, keyword, category = parts
     svc = RuleService(db)
     r = await svc.add_rule(message.from_user.id, keyword, category)
     await message.answer(f"✅ Rule added: {r.keyword} → {r.category} (id: {r.id})")
