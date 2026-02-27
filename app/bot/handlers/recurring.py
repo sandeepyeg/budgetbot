@@ -1,5 +1,5 @@
-from aiogram import Router
-from aiogram.types import Message
+from aiogram import Router, F
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.recurring_service import RecurringService
@@ -27,6 +27,7 @@ async def recurring_list(message: Message, db: AsyncSession):
         return
 
     lines = ["📆 Recurring expenses:"]
+    inline_rows: list[list[InlineKeyboardButton]] = []
     for r in recs:
         status = "⏸ Paused" if r.paused else ("✅ Active" if r.active else "❌ Cancelled")
         if r.frequency == "monthly":
@@ -36,12 +37,51 @@ async def recurring_list(message: Message, db: AsyncSession):
         else:
             freq = "daily"
         repeat = f" ×{r.remaining}" if r.remaining else (" ∞" if r.repeat_count is None else "")
+        ref = short_ref(r.id)
         lines.append(
             f"- {r.item_name} ${r.amount_cents/100:.2f} "
-            f"[{status}] — {freq}{repeat} (ref: {short_ref(r.id)})"
+            f"[{status}] — {freq}{repeat} (ref: {ref})"
         )
+        row: list[InlineKeyboardButton] = []
+        if r.active and not r.paused:
+            row.append(InlineKeyboardButton(text=f"⏸ Pause {ref}", callback_data=f"recurring:pause:{ref}"))
+        if r.active and r.paused:
+            row.append(InlineKeyboardButton(text=f"▶️ Resume {ref}", callback_data=f"recurring:resume:{ref}"))
+        row.append(InlineKeyboardButton(text=f"❌ Cancel {ref}", callback_data=f"recurring:cancel:{ref}"))
+        inline_rows.append(row)
 
-    await message.answer("\n".join(lines))
+    await message.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_rows))
+
+
+@router.callback_query(F.data.regexp(r"^recurring:(pause|resume|cancel):[A-Za-z0-9]+$"))
+async def recurring_quick_action(callback: CallbackQuery, db: AsyncSession):
+    _, action, ref = callback.data.split(":", 2)
+    svc = RecurringService(db)
+
+    if action == "pause":
+        rec = await svc.update_state(ref, callback.from_user.id, paused=True)
+        if rec:
+            await callback.answer("Paused")
+            await callback.message.answer("⏸ Recurring expense paused.")
+        else:
+            await callback.answer("Not found", show_alert=True)
+        return
+
+    if action == "resume":
+        rec = await svc.update_state(ref, callback.from_user.id, paused=False)
+        if rec:
+            await callback.answer("Resumed")
+            await callback.message.answer("▶️ Recurring expense resumed.")
+        else:
+            await callback.answer("Not found", show_alert=True)
+        return
+
+    rec = await svc.update_state(ref, callback.from_user.id, active=False)
+    if rec:
+        await callback.answer("Cancelled")
+        await callback.message.answer("❌ Recurring expense cancelled.")
+    else:
+        await callback.answer("Not found", show_alert=True)
 
 
 @router.message(Command("recurring_cancel"))

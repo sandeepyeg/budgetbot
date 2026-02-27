@@ -1,5 +1,5 @@
-from aiogram import Router
-from aiogram.types import Message
+from aiogram import Router, F
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -183,14 +183,31 @@ async def budget_list(message: Message, db: AsyncSession):
         await message.answer("No budgets set.")
         return
     lines = ["📊 Active budgets:"]
+    inline_rows: list[list[InlineKeyboardButton]] = []
     for b in budgets:
         scope = b.scope_value if b.scope_type == "category" else "Overall"
         progress = await svc.get_budget_progress(message.from_user.id, b, es, now.year, now.month)
         bar = progress_bar(progress["pct"])
+        ref = short_ref(b.id)
         lines.append(
             f"- {scope}: ${progress['spent_cents']/100:.2f}/${progress['effective_limit_cents']/100:.2f} [{bar}] {progress['pct']:.0f}% per {b.period} (ref: {short_ref(b.id)})"
         )
-    await message.answer("\n".join(lines))
+        inline_rows.append([
+            InlineKeyboardButton(text=f"🗑 Delete {ref}", callback_data=f"budget:delete:{ref}")
+        ])
+    await message.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_rows))
+
+
+@router.callback_query(F.data.regexp(r"^budget:delete:[A-Za-z0-9]+$"))
+async def budget_delete_quick(callback: CallbackQuery, db: AsyncSession):
+    ref = callback.data.split(":", 2)[2]
+    svc = BudgetService(db)
+    deleted = await svc.delete_budget(ref, callback.from_user.id)
+    if deleted:
+        await callback.answer("Budget deleted")
+        await callback.message.answer("✅ Budget deleted.")
+    else:
+        await callback.answer("Budget not found", show_alert=True)
 
 @router.message(Command("budget_add"))
 async def budget_add(message: Message, db: AsyncSession):

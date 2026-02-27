@@ -1,5 +1,5 @@
-from aiogram import Router
-from aiogram.types import Message
+from aiogram import Router, F
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -108,9 +108,26 @@ async def rules_list(message: Message, db: AsyncSession):
         await message.answer("No personal rules defined. Global defaults still apply.")
         return
     lines = ["📌 Your category rules:"]
+    inline_rows: list[list[InlineKeyboardButton]] = []
     for r in rules:
-        lines.append(f"- {r.keyword} → {r.category} (ref: {short_ref(r.id)})")
-    await message.answer("\n".join(lines))
+        ref = short_ref(r.id)
+        lines.append(f"- {r.keyword} → {r.category} (ref: {ref})")
+        inline_rows.append([
+            InlineKeyboardButton(text=f"🗑 Delete {ref}", callback_data=f"rule:delete:{ref}")
+        ])
+    await message.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_rows))
+
+
+@router.callback_query(F.data.regexp(r"^rule:delete:[A-Za-z0-9]+$"))
+async def rules_delete_quick(callback: CallbackQuery, db: AsyncSession):
+    ref = callback.data.split(":", 2)[2]
+    svc = RuleService(db)
+    deleted = await svc.delete_rule(callback.from_user.id, ref)
+    if deleted:
+        await callback.answer("Rule deleted")
+        await callback.message.answer("✅ Rule deleted.")
+    else:
+        await callback.answer("Rule not found", show_alert=True)
 
 @router.message(Command("rules_add"))
 async def rules_add(message: Message, db: AsyncSession):
