@@ -8,6 +8,27 @@ class RuleService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def resolve_rule_id(self, user_id: int, rule_ref: str) -> str | None:
+        ref = (rule_ref or "").strip()
+        if not ref:
+            return None
+        if len(ref) >= 36:
+            q = select(CategoryRule.id).where(CategoryRule.id == ref, CategoryRule.user_id == user_id)
+            res = await self.db.execute(q)
+            return res.scalar_one_or_none()
+
+        q = (
+            select(CategoryRule.id)
+            .where(CategoryRule.user_id == user_id, CategoryRule.id.like(f"{ref}%"))
+            .order_by(CategoryRule.created_at_utc.desc())
+            .limit(2)
+        )
+        res = await self.db.execute(q)
+        rows = res.scalars().all()
+        if len(rows) != 1:
+            return None
+        return rows[0]
+
     async def list_rules(self, user_id: int):
         q = select(CategoryRule).where(CategoryRule.user_id == user_id).order_by(CategoryRule.created_at_utc)
         res = await self.db.execute(q)
@@ -26,7 +47,10 @@ class RuleService:
         return r
 
     async def delete_rule(self, user_id: int, rule_id: str):
-        q = select(CategoryRule).where(CategoryRule.id == rule_id, CategoryRule.user_id == user_id)
+        resolved_id = await self.resolve_rule_id(user_id, rule_id)
+        if not resolved_id:
+            return None
+        q = select(CategoryRule).where(CategoryRule.id == resolved_id, CategoryRule.user_id == user_id)
         res = await self.db.execute(q)
         r = res.scalar_one_or_none()
         if not r:

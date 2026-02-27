@@ -9,6 +9,27 @@ class ExpenseService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def resolve_expense_id(self, user_id: int, expense_ref: str) -> str | None:
+        ref = (expense_ref or "").strip()
+        if not ref:
+            return None
+        if len(ref) >= 36:
+            q = select(Expense.id).where(Expense.user_id == user_id, Expense.id == ref)
+            res = await self.db.execute(q)
+            return res.scalar_one_or_none()
+
+        q = (
+            select(Expense.id)
+            .where(Expense.user_id == user_id, Expense.id.like(f"{ref}%"))
+            .order_by(Expense.created_at_utc.desc())
+            .limit(2)
+        )
+        res = await self.db.execute(q)
+        rows = res.scalars().all()
+        if len(rows) != 1:
+            return None
+        return rows[0]
+
     async def add_expense_text(self, *, user_id: int, item_name: str, amount_cents: int,
                                currency: str = "CAD", category: str | None = None,
                                tags: str | None = None, notes: str | None = None) -> Expense:
@@ -33,9 +54,38 @@ class ExpenseService:
         res = await self.db.execute(q)
         return res.scalar_one_or_none()
 
-    async def update_category(self, *, expense_id: str, user_id: int, category_name: str | None):
-        # Ensure ownership
+    async def get_expense_by_ref(self, user_id: int, expense_ref: str) -> Expense | None:
+        expense_id = await self.resolve_expense_id(user_id, expense_ref)
+        if not expense_id:
+            return None
         q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        res = await self.db.execute(q)
+        return res.scalar_one_or_none()
+
+    async def get_last_expense(self, user_id: int) -> Expense | None:
+        q = (
+            select(Expense)
+            .where(Expense.user_id == user_id)
+            .order_by(Expense.created_at_utc.desc())
+            .limit(1)
+        )
+        res = await self.db.execute(q)
+        return res.scalar_one_or_none()
+
+    async def delete_expense_by_ref(self, user_id: int, expense_ref: str) -> Expense | None:
+        exp = await self.get_expense_by_ref(user_id, expense_ref)
+        if not exp:
+            return None
+        await self.db.delete(exp)
+        await self.db.commit()
+        return exp
+
+    async def update_category(self, *, expense_id: str, user_id: int, category_name: str | None):
+        resolved_id = await self.resolve_expense_id(user_id, expense_id)
+        if not resolved_id:
+            return None
+        # Ensure ownership
+        q = select(Expense).where(Expense.id == resolved_id, Expense.user_id == user_id)
         res = await self.db.execute(q)
         exp = res.scalar_one_or_none()
         if not exp:
@@ -181,7 +231,11 @@ class ExpenseService:
         """
         Attach a receipt (file path) to an existing expense.
         """
-        q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        resolved_id = await self.resolve_expense_id(user_id, expense_id)
+        if not resolved_id:
+            return None
+
+        q = select(Expense).where(Expense.id == resolved_id, Expense.user_id == user_id)
         res = await self.db.execute(q)
         exp = res.scalar_one_or_none()
         if not exp:
@@ -193,7 +247,10 @@ class ExpenseService:
         return exp
     
     async def update_tags(self, *, expense_id: str, user_id: int, tags: str):
-        q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        resolved_id = await self.resolve_expense_id(user_id, expense_id)
+        if not resolved_id:
+            return None
+        q = select(Expense).where(Expense.id == resolved_id, Expense.user_id == user_id)
         res = await self.db.execute(q)
         exp = res.scalar_one_or_none()
         if not exp:
@@ -204,12 +261,43 @@ class ExpenseService:
         return exp
 
     async def update_note(self, *, expense_id: str, user_id: int, note: str):
-        q = select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
+        resolved_id = await self.resolve_expense_id(user_id, expense_id)
+        if not resolved_id:
+            return None
+        q = select(Expense).where(Expense.id == resolved_id, Expense.user_id == user_id)
         res = await self.db.execute(q)
         exp = res.scalar_one_or_none()
         if not exp:
             return None
         exp.notes = note
+        await self.db.commit()
+        await self.db.refresh(exp)
+        return exp
+
+    async def update_item(self, *, expense_id: str, user_id: int, item_name: str):
+        resolved_id = await self.resolve_expense_id(user_id, expense_id)
+        if not resolved_id:
+            return None
+        q = select(Expense).where(Expense.id == resolved_id, Expense.user_id == user_id)
+        res = await self.db.execute(q)
+        exp = res.scalar_one_or_none()
+        if not exp:
+            return None
+        exp.item_name = item_name[:200]
+        await self.db.commit()
+        await self.db.refresh(exp)
+        return exp
+
+    async def update_amount(self, *, expense_id: str, user_id: int, amount_cents: int):
+        resolved_id = await self.resolve_expense_id(user_id, expense_id)
+        if not resolved_id:
+            return None
+        q = select(Expense).where(Expense.id == resolved_id, Expense.user_id == user_id)
+        res = await self.db.execute(q)
+        exp = res.scalar_one_or_none()
+        if not exp:
+            return None
+        exp.amount_cents = amount_cents
         await self.db.commit()
         await self.db.refresh(exp)
         return exp

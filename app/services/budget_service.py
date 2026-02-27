@@ -10,6 +10,27 @@ class BudgetService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def resolve_budget_id(self, user_id: int, budget_ref: str) -> str | None:
+        ref = (budget_ref or "").strip()
+        if not ref:
+            return None
+        if len(ref) >= 36:
+            q = select(Budget.id).where(Budget.id == ref, Budget.user_id == user_id)
+            res = await self.db.execute(q)
+            return res.scalar_one_or_none()
+
+        q = (
+            select(Budget.id)
+            .where(Budget.user_id == user_id, Budget.id.like(f"{ref}%"))
+            .order_by(Budget.created_at_utc.desc())
+            .limit(2)
+        )
+        res = await self.db.execute(q)
+        rows = res.scalars().all()
+        if len(rows) != 1:
+            return None
+        return rows[0]
+
     async def add_budget(self, user_id: int, scope_type: str, scope_value: str | None,
                          limit_cents: int, period: str) -> Budget:
         b = Budget(
@@ -32,7 +53,10 @@ class BudgetService:
         return list(res.scalars().all())
 
     async def delete_budget(self, budget_id: str, user_id: int):
-        q = select(Budget).where(Budget.id == budget_id, Budget.user_id == user_id)
+        resolved_id = await self.resolve_budget_id(user_id, budget_id)
+        if not resolved_id:
+            return None
+        q = select(Budget).where(Budget.id == resolved_id, Budget.user_id == user_id)
         res = await self.db.execute(q)
         b = res.scalar_one_or_none()
         if not b:

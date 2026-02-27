@@ -10,3 +10,9 @@ def slugify(value: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", value)
     value = re.sub(r"-{2,}", "-", value).strip("-")
     return value or "other"
+
+
+def short_ref(value: str, size: int = 8) -> str:
+    if not value:
+        return ""
+    return value[:size]
